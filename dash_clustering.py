@@ -27,8 +27,12 @@ import pybnesianCPT_to_df
 # *** NOTE ***: You will need to adapt these imports, functions calls, and paths 
 # depending on how your modules are structured and how your user is supposed to call them.
 
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
-server = app.server  # For deploying if needed
+app = dash.Dash(
+    __name__,
+    external_stylesheets=[dbc.themes.BOOTSTRAP],
+    suppress_callback_exceptions=True
+)
+#server = app.server  # For deploying if needed
 
 # ----- Layout -----
 
@@ -351,4 +355,4 @@ def run_cluster_importance(n_clicks, k_clusters, n_samples, order_choice, all_va
 
 
 if __name__ == '__main__':
-    app.run_server(debug=True, port=8050)
+    app.run_server(debug=True, host='0.0.0.0', port=8050)
