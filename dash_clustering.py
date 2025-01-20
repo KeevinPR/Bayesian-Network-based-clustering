@@ -10,37 +10,109 @@ matplotlib.use('Agg')  # For matplotlib with no display
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import networkx as nx  # For DAG visualization
 
+import pybnesian as pb  # or import pyAgrum, depending on your BN library
 # === Import your code ===
 import discrete_structure
 import discrete_analysis_hellinger
 import discrete_representation
 import pybnesianCPT_to_df
 
-# For demonstration, let's say 'customers.py' also has some utility
-# to build an initial BN or read the dataset. We'll pseudo-import it:
-#import customers
-
-# If you want to load the already trained network for reference:
-# import pybnesian as pb
-
-# *** NOTE ***: You will need to adapt these imports, functions calls, and paths 
-# depending on how your modules are structured and how your user is supposed to call them.
 
 app = dash.Dash(
     __name__,
     external_stylesheets=[dbc.themes.BOOTSTRAP],
     suppress_callback_exceptions=True
 )
-#server = app.server  # For deploying if needed
 
-# ----- Layout -----
 
+############################################################
+# HELPER: Make a DAG figure from a learned BN using networkx
+############################################################
+def plot_bn_dag(bn: pb.DiscreteBN, title="Learned BN Structure"):
+    fig, ax = plt.subplots(figsize=(6, 4))
+    G = nx.DiGraph()
+    G.add_nodes_from(bn.nodes())
+    G.add_edges_from(bn.arcs())
+
+    pos = nx.spring_layout(G, seed=42)  # or any layout you prefer
+    nx.draw_networkx_nodes(G, pos, ax=ax, node_color='skyblue', node_size=800, edgecolors='k')
+    nx.draw_networkx_labels(G, pos, ax=ax, font_size=8)
+    nx.draw_networkx_edges(G, pos, ax=ax, arrowstyle='->', arrowsize=10)
+
+    ax.set_title(title, fontsize=12)
+    ax.set_axis_off()
+
+    buf = io.BytesIO()
+    fig.tight_layout()
+    fig.savefig(buf, format='png')
+    buf.seek(0)
+    encoded = base64.b64encode(buf.read()).decode('utf-8')
+    plt.close(fig)
+    return f"data:image/png;base64,{encoded}"
+
+
+############################################################
+# HELPER: Produce a radar chart with MAP reps + importances
+############################################################
+def plot_map_with_importance(maps_df, importances, df_categories):
+    """
+    maps_df: Pandas DataFrame of shape (#clusters, #variables)
+             Each cell is a tuple (category, probability)
+             or just a single category if you used get_MAP_simple.
+    importances: dict of {cluster_name: {variable: importance_value}}
+    df_categories: from df_to_dict, e.g., discrete_analysis_hellinger.df_to_dict(df)
+    """
+
+    from radar_chart_discrete_categories import ComplexRadar
+
+    fig = plt.figure(figsize=(8, 8))
+    variables = list(maps_df.columns)
+    cluster_list = list(maps_df.index)
+
+    # Build min/max bounds for each variable based on how many categories exist
+    bounds = []
+    for var in variables:
+        cat_count = len(df_categories[var])
+        bounds.append([1, cat_count])  # categories start at 1 in your code
+
+    radar = ComplexRadar(fig, variables, bounds, show_scales=True)
+
+    for clus in cluster_list:
+        row_values = []
+        for var in variables:
+            item = maps_df.loc[clus, var]
+            # If get_MAP returns (category, prob)
+            if isinstance(item, tuple):
+                chosen_cat = item[0]
+            else:
+                chosen_cat = item
+
+            code = df_categories[var][chosen_cat]
+            row_values.append(code)
+
+        label_text = f"Cluster {clus}"
+        radar.plot(row_values, df_categories, label=label_text)
+        radar.fill(row_values, df_categories, alpha=0.2)
+
+    radar.set_title("MAP + Importance Radar Chart", fontsize=12)
+    radar.use_legend(loc='upper right')
+
+    buf = io.BytesIO()
+    fig.savefig(buf, format='png')
+    buf.seek(0)
+    encoded = base64.b64encode(buf.read()).decode('utf-8')
+    plt.close(fig)
+    return f"data:image/png;base64,{encoded}"
+
+
+# ====================== LAYOUT ======================
 app.layout = html.Div([
-    html.H1("Bayesian Network Clustering Demo", style={'textAlign': 'center'}),
+    html.H1("Bayesian Network Clustering", style={'textAlign': 'center'}),
     html.Hr(),
 
-    # 1) Data Upload
+    # Upload
     html.Div([
         html.H3("Upload Discrete Dataset (CSV)"),
         dcc.Upload(
@@ -53,7 +125,7 @@ app.layout = html.Div([
 
     html.Hr(),
 
-    # 2) Select an Action
+    # Choose Action
     html.Div([
         html.H3("Choose Action"),
         dcc.RadioItems(
@@ -69,7 +141,7 @@ app.layout = html.Div([
 
     html.Br(),
 
-    # 3) Parameters for "Cluster Network Only"
+    # cluster_only params
     html.Div([
         html.Label("Number of Clusters:"),
         dcc.Input(
@@ -82,7 +154,7 @@ app.layout = html.Div([
         html.Button("Run Clustering", id='run-clustering-button', n_clicks=0)
     ], id='cluster-only-params', style={'textAlign': 'center', 'display': 'block'}),
 
-    # 4) Parameters for "Cluster Network + Importance Analysis"
+    # cluster_importance params
     html.Div([
         html.Label("Number of Clusters:"),
         dcc.Input(
@@ -118,26 +190,22 @@ app.layout = html.Div([
         html.Div(id='manual-order-container', style={'display': 'none'}),
         html.Button("Continue", id='continue-importance-button', n_clicks=0, style={'marginTop': '10px'}),
         html.Br(),
-        # Final run for "Cluster + Importance"
-        html.Button("Run Clustering + Importance", id='run-clustering-importance-button', n_clicks=0, style={'display': 'none', 'marginTop': '10px'})
+        html.Button("Run Clustering + Importance", id='run-clustering-importance-button', n_clicks=0,
+                    style={'display': 'none', 'marginTop': '10px'})
     ], id='cluster-importance-params', style={'textAlign': 'center', 'display': 'none'}),
 
     html.Hr(),
 
-    # 5) Output area: images, cluster info, CPTs, etc.
+    # Output area
     html.Div(id='output-area', style={'textAlign': 'center'}),
 
-    # Hidden storage
-    dcc.Store(id='stored-data'),       # For the user dataset
-    dcc.Store(id='stored-dataframe'),  # Pandas dataframe once discretized
-    dcc.Store(id='variable-list'),     # For variable ordering
-    dcc.Store(id='cluster-results')    # Could store results for the slider, etc.
+    # dcc.Stores
+    dcc.Store(id='stored-data'),
+    dcc.Store(id='stored-dataframe')
 ])
 
 
-# ===== Callbacks =====
-
-# A) Show/Hide param sections
+# ====================== CALLBACKS ======================
 @app.callback(
     [Output('cluster-only-params', 'style'),
      Output('cluster-importance-params', 'style')],
@@ -145,12 +213,15 @@ app.layout = html.Div([
 )
 def toggle_param_sections(action_value):
     if action_value == 'cluster_only':
-        return ({'textAlign': 'center', 'display': 'block'}, {'textAlign': 'center', 'display': 'none'})
+        return ({'textAlign': 'center', 'display': 'block'},
+                {'textAlign': 'center', 'display': 'none'})
     else:
-        return ({'textAlign': 'center', 'display': 'none'}, {'textAlign': 'center', 'display': 'block'})
+        return ({'textAlign': 'center', 'display': 'none'},
+                {'textAlign': 'center', 'display': 'block'})
 
 
-# B) Upload Data
+# ============ Upload Parsing ============
+
 @app.callback(
     Output('upload-data-filename', 'children'),
     Output('stored-data', 'data'),
@@ -160,13 +231,13 @@ def toggle_param_sections(action_value):
 def handle_upload(content, filename):
     if content is None:
         raise dash.exceptions.PreventUpdate
-    # Basic parse of CSV
+
     content_type, content_string = content.split(',')
     decoded = base64.b64decode(content_string)
-    return (f"File uploaded: {filename}", decoded.decode('utf-8'))
+    msg = f"File uploaded: {filename}"
+    return msg, decoded.decode('utf-8')
 
 
-# C) Once data is stored, parse into DataFrame
 @app.callback(
     Output('stored-dataframe', 'data'),
     Input('stored-data', 'data')
@@ -174,16 +245,30 @@ def handle_upload(content, filename):
 def parse_to_dataframe(raw_text):
     if raw_text is None:
         raise dash.exceptions.PreventUpdate
+
     import io
-    # We assume CSV
-    df = pd.read_csv(io.StringIO(raw_text))
-    # The user says “discrete only” but we might do some checks or forced cat conversion
+    # Read entire CSV as strings
+    df = pd.read_csv(io.StringIO(raw_text), dtype=str)
+    
+    # Strip column names in case of trailing spaces
+    df.columns = [c.strip() for c in df.columns]
+
+    # Convert EVERY column to category
+    # Even "ID" or numeric columns remain, but become many-categories
     for col in df.columns:
-        df[col] = df[col].astype('category')
+        # Force to string (again) then to category
+        df[col] = df[col].astype(str).astype('category')
+
+    print("DEBUG: Final columns ->", list(df.columns))
+    print("DEBUG: dtypes ->\n", df.dtypes)
+
+    # Return as JSON
     return df.to_json(date_format='iso', orient='split')
 
 
-# D) If "Manually Select Variable Order" is chosen -> show dropdowns for each variable
+
+# ============ Manual order ============
+
 @app.callback(
     [Output('manual-order-container', 'children'),
      Output('manual-order-container', 'style')],
@@ -195,8 +280,8 @@ def show_manual_order(order_choice, df_json):
         return ([], {'display': 'none'})
 
     df = pd.read_json(df_json, orient='split')
-    var_list = df.columns.tolist()  # except cluster? The user might define it. Up to you.
-    # Build a series of dropdowns for each variable to pick a rank 1..N
+    var_list = df.columns.tolist()
+
     children = []
     used_positions = list(range(1, len(var_list)+1))
     for var in var_list:
@@ -213,7 +298,6 @@ def show_manual_order(order_choice, df_json):
     return (children, {'display': 'block'})
 
 
-# E) “Continue” button -> show/hide the “Run Clustering + Importance” button
 @app.callback(
     Output('run-clustering-importance-button', 'style'),
     Input('continue-importance-button', 'n_clicks'),
@@ -223,135 +307,155 @@ def show_manual_order(order_choice, df_json):
 def show_final_run_button(n_clicks, order_choice, all_values):
     if n_clicks is None or n_clicks == 0:
         return {'display': 'none'}
-    # If user chose manual but not all positions selected, we might handle that
+
     if order_choice == 'manual':
         if None in all_values or len(set([v for v in all_values if v is not None])) != len(all_values):
-            # user has duplicates or missing selections
-            return {'display': 'none'}  # block user from continuing
+            return {'display': 'none'}
+
     return {'display': 'inline-block'}
 
 
-# F) “Run Clustering” (Cluster Only)
+# ============ Cluster-Only ============
+
 @app.callback(
-    Output('output-area', 'children'),
+    Output('output-area', 'children',
+           allow_duplicate=True),  # We assume Dash>=2.9
     Input('run-clustering-button', 'n_clicks'),
     State('num-clusters-input', 'value'),
-    State('stored-dataframe', 'data')
+    State('stored-dataframe', 'data'),
+    prevent_initial_call='initial_duplicate'
 )
 def run_cluster_only(n_clicks, k_clusters, df_json):
     if n_clicks is None or n_clicks == 0:
         raise dash.exceptions.PreventUpdate
+
     if not df_json:
         return "No dataset found. Please upload a CSV."
 
-    # 1) Read DataFrame
     df = pd.read_json(df_json, orient='split')
-    # 2) Build naive BN with 'cluster' node and arcs = (cluster->var) for each variable
-    #    Then call your structure SEM or partial logic from discrete_structure or from your 'customers.py' example
-    #    For brevity, let's just pseudo-code:
-    # NOTE: In your 'customers.py' logic, you do something like:
-    """
-    # in_arcs = [('cluster', var) for var in df.columns]
-    # in_nodes = ['cluster'] + list(df.columns)
-    # (We also define categories dict)
-    # red_inicial = pb.DiscreteBN(in_nodes, in_arcs)
-    # clusters = [f'c{i}' for i in range(1, k_clusters+1)]
-    # best = sem(...) # from discrete_structure.py
-    """
-    # We'll mock some results here:
-    # but you'd do something akin to the code in customers.py + discrete_structure.sem(...) 
-    try:
-        # For demonstration, let's say we call a function sem(...) from discrete_structure
-        # best_network = discrete_structure.sem(red_inicial, df, categories, clusters)
-        # We'll just pretend we got "best_network"
-        # Then, we might produce cluster images. For example, we might produce a radar chart or show arcs, etc.
-        result_divs = [
-            html.H4("Clustering Completed"),
-            html.P(f"Number of clusters = {k_clusters}"),
-            # Possibly show some images or placeholders
-            html.Img(src='data:image/png;base64,XYZ', style={'maxWidth': '300px'})
-        ]
-        return result_divs
-    except Exception as e:
-        return f"Error in cluster_only: {str(e)}"
+
+    for col in df.columns:
+        df[col] = df[col].astype(str).astype('category')
 
 
-# G) “Run Clustering + Importance”
+    # Build naive BN with cluster->var arcs
+    in_arcs = [('cluster', var) for var in df.columns]
+    in_nodes = ['cluster'] + list(df.columns)
+    cluster_names = [f'c{i}' for i in range(1, k_clusters+1)]
+
+    red_inicial = pb.DiscreteBN(in_nodes, in_arcs)
+
+    # Build categories
+    categories = {'cluster': cluster_names}
+    for var in df.columns:
+        print(f"DEBUG: Accessing df['{var}'] => dtype={df[var].dtype}")
+        categories[var] = df[var].cat.categories.tolist()
+
+    best_network = discrete_structure.sem(red_inicial, df, categories, cluster_names)
+    arcs_list = list(best_network.arcs())
+
+    dag_img_src = plot_bn_dag(best_network, "Learned BN (Cluster Only)")
+    result_divs = [
+        html.H4("Clustering Completed (Network Only)"),
+        html.P(f"Number of clusters = {k_clusters}"),
+        html.H5("Arcs:"),
+        html.Ul([html.Li(str(arc)) for arc in arcs_list]),
+        html.Img(src=dag_img_src, style={'maxWidth': '500px'})
+    ]
+    return result_divs
+
+
+# ============ Cluster + Importance ============
+
 @app.callback(
-    Output('output-area', 'children'),
+    Output('output-area', 'children',
+           allow_duplicate=True),
     Input('run-clustering-importance-button', 'n_clicks'),
     State('num-clusters-importance-input', 'value'),
     State('num-samples-input', 'value'),
     State('variable-order-radio', 'value'),
     State({'type': 'var-order-dropdown', 'index': ALL}, 'value'),
     State({'type': 'var-order-dropdown', 'index': ALL}, 'id'),
-    State('stored-dataframe', 'data')
+    State('stored-dataframe', 'data'),
+    prevent_initial_call='initial_duplicate'
 )
 def run_cluster_importance(n_clicks, k_clusters, n_samples, order_choice, all_values, all_ids, df_json):
     if n_clicks is None or n_clicks == 0:
         raise dash.exceptions.PreventUpdate
+
     if not df_json:
         return "No dataset found. Please upload a CSV."
 
     df = pd.read_json(df_json, orient='split')
-    # Possibly reorder columns if user chose manual variable ordering
+    
+    for col in df.columns:
+        df[col] = df[col].astype(str).astype('category')
+
+    # Reorder columns if manual
     if order_choice == 'manual':
-        # user provided a rank for each var
         var_positions = {}
         for val, id_ in zip(all_values, all_ids):
             var_positions[id_['index']] = val
-        # sort by position
         sorted_vars = sorted(var_positions.items(), key=lambda x: x[1])
-        # reorder df columns
         new_col_order = [s[0] for s in sorted_vars]
-        # we might skip 'cluster' if it already exists
-        # but presumably it doesn't exist yet in the data
         df = df[new_col_order]
 
-    # Next: run a function that does the BN structure + importance measures from:
-    #   discrete_analysis_hellinger, discrete_representation, etc.
-    try:
-        # 1) Learn BN with k_clusters
-        # 2) Sample or get MAP reps
-        # 3) Compute importance
-        # 4) Generate images (radar charts, network arcs, etc.)
-        #    We'll do a quick mock for demonstration:
-        
-        # Example: get MAP representatives
-        #   maps = discrete_analysis_hellinger.get_MAP(best_network, clusters, n_samples)
-        #   Then naming, naming_categories, or cluster_dag
-        # For the actual code, see your customers_analysis.py calls.
+    in_arcs = [('cluster', var) for var in df.columns]
+    in_nodes = ['cluster'] + list(df.columns)
+    cluster_names = [f'c{i}' for i in range(1, k_clusters+1)]
 
-        # We'll pretend we generate a figure and store in memory
-        fig, ax = plt.subplots()
-        ax.set_title("Importance Analysis Example")
-        ax.plot(np.random.rand(10))
-        # Convert fig to base64
-        buf = io.BytesIO()
-        fig.savefig(buf, format='png')
-        buf.seek(0)
-        encoded = base64.b64encode(buf.read()).decode('utf-8')
-        img_src = f"data:image/png;base64,{encoded}"
+    red_inicial = pb.DiscreteBN(in_nodes, in_arcs)
 
-        # Return results
-        cluster_info = html.Div([
-            html.H4("Cluster + Importance Analysis Results"),
-            html.P(f"Number of clusters = {k_clusters}"),
-            html.P(f"Samples for inference = {n_samples}"),
-            html.Img(src=img_src, style={'maxWidth': '400px'}),
-            html.Hr(),
-            html.Div("Below: CPTs / cluster representation... (mock data)")
-        ])
-        return cluster_info
+    categories = {'cluster': cluster_names}
+    for var in df.columns:
+        categories[var] = df[var].cat.categories.tolist()
 
-    except Exception as e:
-        return f"Error in cluster_importance: {str(e)}"
+    best_network = discrete_structure.sem(red_inicial, df, categories, cluster_names)
 
+    # get MAP
+    map_reps = discrete_analysis_hellinger.get_MAP(best_network, cluster_names, n=n_samples)
 
-# If you want to incorporate a “slider” or “arrows” to navigate among cluster images:
-# - You could store each cluster's figure in a list, then display based on a slider value or button clicks.
-# - This is an advanced topic but entirely doable. You’d store them in a dcc.Store or a global variable,
-#   then in a callback read the index from dcc.Slider / or arrow buttons to display the correct image.
+    # compute importance
+    ancestral_order = list(pb.Dag(best_network.nodes(), best_network.arcs()).topological_sort())
+    if 'cluster' in ancestral_order:
+        ancestral_order.remove('cluster')
+
+    importances_dict = {}
+    for clus in cluster_names:
+        row = map_reps.loc[clus]
+        point_list = []
+        for var in ancestral_order:
+            val = row[var]
+            if isinstance(val, tuple):
+                val = val[0]
+            point_list.append(val)
+
+        imp_clus = discrete_analysis_hellinger.importance_1(
+            best_network, point_list, categories, cluster_names
+        )
+        importances_dict[clus] = imp_clus
+
+    # Build df_categories
+    df_categories = discrete_analysis_hellinger.df_to_dict(df)
+
+    radar_img_src = plot_map_with_importance(map_reps, importances_dict, df_categories)
+    dag_img_src = plot_bn_dag(best_network, "Cluster + Importance BN")
+
+    arcs_list = list(best_network.arcs())
+
+    layout_div = html.Div([
+        html.H4("Clustering + Importance Analysis Results"),
+        html.P(f"Number of clusters = {k_clusters}"),
+        html.P(f"Samples for inference = {n_samples}"),
+        html.Hr(),
+        html.H5("Arcs in the Learned BN:"),
+        html.Ul([html.Li(str(arc)) for arc in arcs_list]),
+        html.Img(src=dag_img_src, style={'maxWidth': '400px', 'display': 'block', 'margin': '0 auto'}),
+        html.Hr(),
+        html.H5("Radar Chart of MAP Representatives + Importance"),
+        html.Img(src=radar_img_src, style={'maxWidth': '500px', 'display': 'block', 'margin': '0 auto'})
+    ])
+    return layout_div
 
 
 if __name__ == '__main__':
