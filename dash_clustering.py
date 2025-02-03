@@ -108,10 +108,13 @@ def plot_map_with_importance(maps_df, importances, df_categories):
 
 
 # ====================== LAYOUT ======================
-app.layout = html.Div([
+app.layout = dcc.Loading(
+    id="global-spinner",
+    overlay_style={"visibility":"visible", "filter": "blur(1px)"},
+    type="circle",        # You can choose "circle", "dot", "default", etc.
+    fullscreen=False,      # This ensures it covers the entire page
+    children=html.Div([
     html.H1("Bayesian Network Clustering", style={'textAlign': 'center'}),
-    html.Hr(),
-
     # Upload
     html.Div([
         html.H3("Upload Discrete Dataset (CSV)"),
@@ -203,7 +206,7 @@ app.layout = html.Div([
     dcc.Store(id='stored-data'),
     dcc.Store(id='stored-dataframe')
 ])
-
+)
 
 # ====================== CALLBACKS ======================
 @app.callback(
