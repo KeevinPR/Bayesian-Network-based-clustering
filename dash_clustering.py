@@ -22,6 +22,7 @@ import pybnesianCPT_to_df
 
 app = dash.Dash(
     __name__,
+    requests_pathname_prefix='/Model/LearningFromData/ClusteringDash/',
     external_stylesheets=[dbc.themes.BOOTSTRAP],
     suppress_callback_exceptions=True
 )
@@ -462,4 +463,4 @@ def run_cluster_importance(n_clicks, k_clusters, n_samples, order_choice, all_va
 
 
 if __name__ == '__main__':
-    app.run_server(debug=True, host='0.0.0.0', port=8050)
+    app.run_server(debug=True, host='0.0.0.0', port=8055)
