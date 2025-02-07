@@ -84,7 +84,6 @@ def plot_map_with_importance(maps_df, importances, df_categories):
         row_values = []
         for var in variables:
             item = maps_df.loc[clus, var]
-            # If get_MAP returns (category, prob)
             if isinstance(item, tuple):
                 chosen_cat = item[0]
             else:
@@ -112,104 +111,118 @@ def plot_map_with_importance(maps_df, importances, df_categories):
 app.layout = dcc.Loading(
     id="global-spinner",
     overlay_style={"visibility":"visible", "filter": "blur(1px)"},
-    type="circle",        # You can choose "circle", "dot", "default", etc.
-    fullscreen=False,      # This ensures it covers the entire page
+    type="circle",
+    fullscreen=False,
     children=html.Div([
-    html.H1("Bayesian Network Clustering", style={'textAlign': 'center'}),
-    # Upload
-    html.Div([
-        html.H3("Upload Discrete Dataset (CSV)"),
-        dcc.Upload(
-            id='upload-data',
-            children=html.Button('Upload File (CSV)'),
-            multiple=False
-        ),
-        html.Div(id='upload-data-filename', style={'marginTop': '5px', 'color': 'green'})
-    ], style={'textAlign': 'center'}),
+        html.H1("Bayesian Network Clustering", style={'textAlign': 'center'}),
 
-    html.Hr(),
+        # Upload section
+        html.Div([
+            html.H3("Upload Discrete Dataset (CSV)"),
+            dcc.Upload(
+                id='upload-data',
+                children=html.Button('Upload File (CSV)'),
+                multiple=False
+            ),
+            # Checklist to use a default dataset
+            dcc.Checklist(
+                id='use-default-dataset',
+                options=[{'label': 'Use default dataset', 'value': 'default'}],
+                value=[],
+                style={'textAlign': 'center', 'marginTop': '10px'}
+            ),
+            html.Div(id='upload-data-filename', style={'marginTop': '5px', 'color': 'green'})
+        ], style={'textAlign': 'center'}),
 
-    # Choose Action
-    html.Div([
-        html.H3("Choose Action"),
-        dcc.RadioItems(
-            id='action-radio',
-            options=[
-                {'label': 'Cluster Network Only', 'value': 'cluster_only'},
-                {'label': 'Cluster Network + Importance Analysis', 'value': 'cluster_importance'}
-            ],
-            value='cluster_only',
-            style={'textAlign': 'center'}
-        )
-    ], style={'textAlign': 'center'}),
+        html.Hr(),
 
-    html.Br(),
+        # Choose Action
+        html.Div([
+            html.H3("Choose Action"),
+            dcc.RadioItems(
+                id='action-radio',
+                options=[
+                    {'label': 'Cluster Network Only', 'value': 'cluster_only'},
+                    {'label': 'Cluster Network + Importance Analysis', 'value': 'cluster_importance'}
+                ],
+                value='cluster_only',
+                style={'textAlign': 'center'}
+            )
+        ], style={'textAlign': 'center'}),
 
-    # cluster_only params
-    html.Div([
-        html.Label("Number of Clusters:"),
-        dcc.Input(
-            id='num-clusters-input',
-            type='number',
-            value=2,
-            min=2,
-            step=1
-        ),
-        html.Button("Run Clustering", id='run-clustering-button', n_clicks=0)
-    ], id='cluster-only-params', style={'textAlign': 'center', 'display': 'block'}),
-
-    # cluster_importance params
-    html.Div([
-        html.Label("Number of Clusters:"),
-        dcc.Input(
-            id='num-clusters-importance-input',
-            type='number',
-            value=2,
-            min=2,
-            step=1,
-            style={'marginRight': '20px'}
-        ),
-        html.Label("Sample for Inference:"),
-        dcc.Input(
-            id='num-samples-input',
-            type='number',
-            value=100000,
-            min=1000,
-            step=1000,
-            style={'marginRight': '20px'}
-        ),
         html.Br(),
-        html.Label("Order Variables?"),
-        dcc.RadioItems(
-            id='variable-order-radio',
-            options=[
-                {'label': 'Random Category Order', 'value': 'random'},
-                {'label': 'Manually Select Variable Order', 'value': 'manual'},
-                {'label': 'Skip Order Selection', 'value': 'skip'}
-            ],
-            value='skip',
-            style={'marginTop': '10px'}
-        ),
-        html.Br(),
-        html.Div(id='manual-order-container', style={'display': 'none'}),
-        html.Button("Continue", id='continue-importance-button', n_clicks=0, style={'marginTop': '10px'}),
-        html.Br(),
-        html.Button("Run Clustering + Importance", id='run-clustering-importance-button', n_clicks=0,
-                    style={'display': 'none', 'marginTop': '10px'})
-    ], id='cluster-importance-params', style={'textAlign': 'center', 'display': 'none'}),
 
-    html.Hr(),
+        # cluster_only params
+        html.Div([
+            html.Label("Number of Clusters:"),
+            dcc.Input(
+                id='num-clusters-input',
+                type='number',
+                value=2,
+                min=2,
+                step=1
+            ),
+            html.Button("Run Clustering", id='run-clustering-button', n_clicks=0)
+        ], id='cluster-only-params', style={'textAlign': 'center', 'display': 'block'}),
 
-    # Output area
-    html.Div(id='output-area', style={'textAlign': 'center'}),
+        # cluster_importance params
+        html.Div([
+            html.Label("Number of Clusters:"),
+            dcc.Input(
+                id='num-clusters-importance-input',
+                type='number',
+                value=2,
+                min=2,
+                step=1,
+                style={'marginRight': '20px'}
+            ),
+            html.Label("Sample for Inference:"),
+            dcc.Input(
+                id='num-samples-input',
+                type='number',
+                value=100000,
+                min=1000,
+                step=1000,
+                style={'marginRight': '20px'}
+            ),
+            html.Br(),
+            html.Label("Order Variables?"),
+            dcc.RadioItems(
+                id='variable-order-radio',
+                options=[
+                    {'label': 'Random Category Order', 'value': 'random'},
+                    {'label': 'Manually Select Variable Order', 'value': 'manual'},
+                    {'label': 'Skip Order Selection', 'value': 'skip'}
+                ],
+                value='skip',
+                style={'marginTop': '10px'}
+            ),
+            html.Br(),
+            html.Div(id='manual-order-container', style={'display': 'none'}),
+            html.Button("Continue", id='continue-importance-button', n_clicks=0, style={'marginTop': '10px'}),
+            html.Br(),
+            html.Button(
+                "Run Clustering + Importance",
+                id='run-clustering-importance-button',
+                n_clicks=0,
+                style={'display': 'none', 'marginTop': '10px'}
+            )
+        ], id='cluster-importance-params', style={'textAlign': 'center', 'display': 'none'}),
 
-    # dcc.Stores
-    dcc.Store(id='stored-data'),
-    dcc.Store(id='stored-dataframe')
-])
+        html.Hr(),
+
+        # Output area
+        html.Div(id='output-area', style={'textAlign': 'center'}),
+
+        # dcc.Stores
+        dcc.Store(id='stored-data'),
+        dcc.Store(id='stored-dataframe')
+    ])
 )
 
+
 # ====================== CALLBACKS ======================
+
 @app.callback(
     [Output('cluster-only-params', 'style'),
      Output('cluster-importance-params', 'style')],
@@ -224,22 +237,41 @@ def toggle_param_sections(action_value):
                 {'textAlign': 'center', 'display': 'block'})
 
 
-# ============ Upload Parsing ============
-
+# Handle upload or default dataset
 @app.callback(
     Output('upload-data-filename', 'children'),
     Output('stored-data', 'data'),
     Input('upload-data', 'contents'),
+    Input('use-default-dataset', 'value'),
     State('upload-data', 'filename')
 )
-def handle_upload(content, filename):
-    if content is None:
-        raise dash.exceptions.PreventUpdate
+def handle_upload_or_default(uploaded_contents, default_value, uploaded_filename):
+    """
+    If the user checks 'default', read from a local CSV path.
+    Otherwise, if the user has uploaded a file, parse that file.
+    """
+    # Path to your default dataset (adjust as needed)
+    default_csv_path = "/var/www/html/CIGModels/backend/cigmodelsdjango/cigmodelsdjangoapp/Bayesian-Network-based-clustering/datasets/customersSmall.csv"
 
-    content_type, content_string = content.split(',')
-    decoded = base64.b64decode(content_string)
-    msg = f"File uploaded: {filename}"
-    return msg, decoded.decode('utf-8')
+    # If 'default' is selected, use default dataset
+    if 'default' in default_value:
+        try:
+            df_default = pd.read_csv(default_csv_path, dtype=str)
+            raw_text = df_default.to_csv(index=False)
+            msg = f"Using default dataset: {os.path.basename(default_csv_path)}"
+            return msg, raw_text
+        except Exception as e:
+            return f"Error reading default dataset: {str(e)}", None
+
+    # Otherwise, handle user upload
+    if uploaded_contents is not None:
+        content_type, content_string = uploaded_contents.split(',')
+        decoded = base64.b64decode(content_string)
+        msg = f"File uploaded: {uploaded_filename}"
+        return msg, decoded.decode('utf-8')
+
+    # If neither default is selected nor a file is uploaded, do nothing
+    raise dash.exceptions.PreventUpdate
 
 
 @app.callback(
@@ -257,21 +289,12 @@ def parse_to_dataframe(raw_text):
     # Strip column names in case of trailing spaces
     df.columns = [c.strip() for c in df.columns]
 
-    # Convert EVERY column to category
-    # Even "ID" or numeric columns remain, but become many-categories
+    # Convert every column to category
     for col in df.columns:
-        # Force to string (again) then to category
         df[col] = df[col].astype(str).astype('category')
 
-    print("DEBUG: Final columns ->", list(df.columns))
-    print("DEBUG: dtypes ->\n", df.dtypes)
-
-    # Return as JSON
     return df.to_json(date_format='iso', orient='split')
 
-
-
-# ============ Manual order ============
 
 @app.callback(
     [Output('manual-order-container', 'children'),
@@ -287,7 +310,7 @@ def show_manual_order(order_choice, df_json):
     var_list = df.columns.tolist()
 
     children = []
-    used_positions = list(range(1, len(var_list)+1))
+    used_positions = list(range(1, len(var_list) + 1))
     for var in var_list:
         children.append(
             html.Div([
@@ -313,46 +336,42 @@ def show_final_run_button(n_clicks, order_choice, all_values):
         return {'display': 'none'}
 
     if order_choice == 'manual':
-        if None in all_values or len(set([v for v in all_values if v is not None])) != len(all_values):
+        # Check if any position is None or if there are duplicates
+        if None in all_values or len(set(all_values)) != len(all_values):
             return {'display': 'none'}
 
     return {'display': 'inline-block'}
 
 
-# ============ Cluster-Only ============
-
 @app.callback(
-    Output('output-area', 'children',
-           allow_duplicate=True),  # We assume Dash>=2.9
+    Output('output-area', 'children', allow_duplicate=True),
     Input('run-clustering-button', 'n_clicks'),
     State('num-clusters-input', 'value'),
     State('stored-dataframe', 'data'),
     prevent_initial_call='initial_duplicate'
 )
 def run_cluster_only(n_clicks, k_clusters, df_json):
+    if not df_json:
+        return "No dataset found. Please upload a CSV or use the default dataset."
     if n_clicks is None or n_clicks == 0:
         raise dash.exceptions.PreventUpdate
 
-    if not df_json:
-        return "No dataset found. Please upload a CSV."
-
     df = pd.read_json(df_json, orient='split')
 
+    # Convert columns to category again (in case something changed)
     for col in df.columns:
         df[col] = df[col].astype(str).astype('category')
-
 
     # Build naive BN with cluster->var arcs
     in_arcs = [('cluster', var) for var in df.columns]
     in_nodes = ['cluster'] + list(df.columns)
-    cluster_names = [f'c{i}' for i in range(1, k_clusters+1)]
+    cluster_names = [f'c{i}' for i in range(1, k_clusters + 1)]
 
     red_inicial = pb.DiscreteBN(in_nodes, in_arcs)
 
-    # Build categories
+    # Build categories dictionary
     categories = {'cluster': cluster_names}
     for var in df.columns:
-        print(f"DEBUG: Accessing df['{var}'] => dtype={df[var].dtype}")
         categories[var] = df[var].cat.categories.tolist()
 
     best_network = discrete_structure.sem(red_inicial, df, categories, cluster_names)
@@ -369,11 +388,8 @@ def run_cluster_only(n_clicks, k_clusters, df_json):
     return result_divs
 
 
-# ============ Cluster + Importance ============
-
 @app.callback(
-    Output('output-area', 'children',
-           allow_duplicate=True),
+    Output('output-area', 'children', allow_duplicate=True),
     Input('run-clustering-importance-button', 'n_clicks'),
     State('num-clusters-importance-input', 'value'),
     State('num-samples-input', 'value'),
@@ -383,12 +399,14 @@ def run_cluster_only(n_clicks, k_clusters, df_json):
     State('stored-dataframe', 'data'),
     prevent_initial_call='initial_duplicate'
 )
-def run_cluster_importance(n_clicks, k_clusters, n_samples, order_choice, all_values, all_ids, df_json):
+def run_cluster_importance(
+    n_clicks, k_clusters, n_samples, order_choice,
+    all_values, all_ids, df_json
+):
+    if not df_json:
+        return "No dataset found. Please upload a CSV or use the default dataset."
     if n_clicks is None or n_clicks == 0:
         raise dash.exceptions.PreventUpdate
-
-    if not df_json:
-        return "No dataset found. Please upload a CSV."
 
     df = pd.read_json(df_json, orient='split')
     
@@ -404,22 +422,24 @@ def run_cluster_importance(n_clicks, k_clusters, n_samples, order_choice, all_va
         new_col_order = [s[0] for s in sorted_vars]
         df = df[new_col_order]
 
+    # Build naive BN structure
     in_arcs = [('cluster', var) for var in df.columns]
     in_nodes = ['cluster'] + list(df.columns)
-    cluster_names = [f'c{i}' for i in range(1, k_clusters+1)]
-
+    cluster_names = [f'c{i}' for i in range(1, k_clusters + 1)]
     red_inicial = pb.DiscreteBN(in_nodes, in_arcs)
 
+    # Build categories
     categories = {'cluster': cluster_names}
     for var in df.columns:
         categories[var] = df[var].cat.categories.tolist()
 
+    # Learn BN
     best_network = discrete_structure.sem(red_inicial, df, categories, cluster_names)
 
-    # get MAP
+    # Get MAP
     map_reps = discrete_analysis_hellinger.get_MAP(best_network, cluster_names, n=n_samples)
 
-    # compute importance
+    # Compute importance
     ancestral_order = list(pb.Dag(best_network.nodes(), best_network.arcs()).topological_sort())
     if 'cluster' in ancestral_order:
         ancestral_order.remove('cluster')
@@ -439,7 +459,7 @@ def run_cluster_importance(n_clicks, k_clusters, n_samples, order_choice, all_va
         )
         importances_dict[clus] = imp_clus
 
-    # Build df_categories
+    # Build df_categories for radar chart
     df_categories = discrete_analysis_hellinger.df_to_dict(df)
 
     radar_img_src = plot_map_with_importance(map_reps, importances_dict, df_categories)
