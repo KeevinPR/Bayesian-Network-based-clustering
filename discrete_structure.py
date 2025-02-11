@@ -31,7 +31,7 @@ def EM(red, dataframe, clusters_names, kmax=100):
     for var in df.columns:
         df[var] = df[var].astype('category')
 
-    # First fit
+     # Con esta muestra sampleada hacemos el primer fit de la red utilizando la libreria de pybnesian.
     rb.fit(df)
     print("[DEBUG] EM: Done initial fit with random cluster assignment.")
 
@@ -39,8 +39,9 @@ def EM(red, dataframe, clusters_names, kmax=100):
         if k % 10 == 0:
             print(f"[DEBUG] EM iteration k={k}/{kmax}")
 
-        new_c = []
-        logl = []
+        new_c = [] # esta lista va a contener la nueva muestra sampleada d
+        logl = [] # esta lista contiene las listas de los loglikelihoods para cada punto del dataframe con cada posible cluster: P(c'k',X)
+        # Este loglikelihood se utilizará para el cálculo de P(C|X)=P(C,X)
         # Re-clone the original data
         df = dataframe.copy()
 
@@ -54,13 +55,14 @@ def EM(red, dataframe, clusters_names, kmax=100):
 
         # E-step: sample new cluster assignment from posterior
         for row_idx in range(df.shape[0]):
-            lklh = []
+            # De esta forma estamos ralizando Montecarlo EM con un único sample
+            lklh = [] # lista con los loglikelihood para cada cluster
             for c_idx, _ in enumerate(clusters_names):
                 x_val = math.exp(logl[c_idx][row_idx])
                 lklh.append(x_val)
             total = sum(lklh)
             # Normalized posterior
-            prob_posterior = [val / total for val in lklh]
+            prob_posterior = [val / total for val in lklh] # normalización
             sampled_cluster = np.random.choice(np.asarray(clusters_names), p=prob_posterior)
             new_c.append(sampled_cluster)
 
@@ -78,6 +80,7 @@ def EM(red, dataframe, clusters_names, kmax=100):
             df[var] = df[var].astype('category')
 
         # M-step: fit again
+        # Con esta muestra sampleada hacemos el fit de la red utilizando la libreria de pybnesian.
         rb.fit(df)
 
         # (Optional) clone and fit again?
@@ -95,11 +98,11 @@ def structure_logl(red, dataframe, clusters_names, sample=20):
     print("[DEBUG] Entering structure_logl(...)")
     rb = red.clone()
     df = dataframe.copy()
-    logl = []
-    slogl = []
+    logl = []  # esta lista contiene las listas de los loglikelihoods para cada punto del dataframe con cada posible cluster: P(c'k',X) 
+    slogl = []  # esta lista contiene la suma de los loglikelihood de cada punto del dataframe para cada muestra de 'clusters' sampleada de P(C|X)
 
     # log-likelihood for each cluster
-    for cluster in clusters_names:
+    for cluster in clusters_names:  # para cada cluster añadimos una columna al dataframe con el cluster dado para poder calcular P(c'k',X)
         c = [cluster]*df.shape[0]
         df['cluster'] = pd.Series(pd.Categorical(c, categories=clusters_names))
         logl_vals = rb.logl(df).tolist()
@@ -134,10 +137,10 @@ def structure_logl(red, dataframe, clusters_names, sample=20):
     return avg_slogl
 
 
-def n_param(red, number_of_clusters, categories_df):
+def n_param(red, number_of_clusters,categories_df):  # dado una red, el nº de clusters y las categorías de cada variable (es inaccesible por pybnesian) calculamos el nº de parámetros estimados
     print("[DEBUG] Entering n_param(...)")
-    n = number_of_clusters - 1
-    for var in red.children('cluster'):
+    n = number_of_clusters - 1  # comenzamos con el nº de parámetros de la variable cluster que como bien sabemos es number_clusters-1 debido a que trabajamos con un TAN
+    for var in red.children('cluster'):  # como todos son hijos de cluster accedemos a las variables de esta forma.
         n += (red.num_parents(var)) * (len(categories_df[var]) - 1)
     print(f"[DEBUG] n_param returning {n}")
     return n
@@ -147,9 +150,9 @@ def sem(bn, dataframe, categories_df, clusters_names, max_iter=2, em_kmax=5, str
     print("[DEBUG] Entering sem(...)")
     print(f"[DEBUG] sem parameters: max_iter={max_iter}, em_kmax={em_kmax}, structlog_sample={structlog_sample}")
     print("[DEBUG] Running initial EM (Naive Bayes).")
-    clgbn = EM(bn, dataframe, clusters_names, em_kmax)
+    clgbn = EM(bn, dataframe, clusters_names, em_kmax)  # comenzamos estimando la red naive bayes
     best = clgbn.clone()
-    i = 0
+    i = 0  # controla cuando se llega a un punto estacionario el máximo nº de iteraciones a realizar
 
     df = dataframe.copy()
     initial_logl = structure_logl(clgbn, df, clusters_names, structlog_sample)
@@ -159,11 +162,11 @@ def sem(bn, dataframe, categories_df, clusters_names, max_iter=2, em_kmax=5, str
     participant_nodes = list(df.columns.copy())
     possible_arcs = list(itertools.permutations(participant_nodes, 2))
     print(f"[DEBUG] Number of possible arcs to check: {len(possible_arcs)}")
-
+    # Comenzamos el algoritmo sem
     while i < max_iter:
         print(f"[DEBUG] SEM outer loop iteration i={i}/{max_iter}. Current BIC={BIC}")
-        s = 0
-        k = 0
+        s = 0 # controla si se ha mejorado en la iteración
+        k = 0  # lo utilizamos para ir recorriendo la lista de posibles acciones (en este caso añadir arco)
         random.shuffle(possible_arcs)
 
         # 1) Try adding arcs
