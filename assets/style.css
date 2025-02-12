@@ -121,3 +121,25 @@ button:focus {
     background-color: #00A2E1;
     color: white;
 }
+
+/* Make the arrow icons black (if they are currently white) */
+.carousel-control-prev-icon,
+.carousel-control-next-icon {
+    filter: invert(1);
+}
+
+/* Move the arrows further left/right if you want them outside the main image */
+.carousel-control-prev {
+    left: -60px;  /* adjust as needed */
+}
+
+.carousel-control-next {
+    right: -60px; /* adjust as needed */
+}
+
+.carousel-indicators li {
+    background-color: #000;  /* black dots instead of white */
+}
+.carousel-indicators .active {
+    background-color: #555;  /* slightly different color for the active dot */
+}
