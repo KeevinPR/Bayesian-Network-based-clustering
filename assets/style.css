@@ -143,3 +143,31 @@ button:focus {
 .carousel-indicators .active {
     background-color: #555;  /* slightly different color for the active dot */
 }
+
+
+/* src/app/styles.css */
+#output-area {
+    overflow: visible !important;
+}
+.zoomable {
+    position: relative; 
+    z-index: 9999;      
+    transition: transform 0.2s;
+}
+  
+.zoomable:hover {
+    transform: scale(1.5);
+}
+hr {
+    position: relative;
+    z-index: 1;
+}
+
+.clustering-carousel img {
+    transition: transform 0.2s;
+}
+
+.clustering-carousel img:hover {
+    transform: scale(1.5);
+    z-index: 9999;         /* Bring the hovered image to the front */
+}
