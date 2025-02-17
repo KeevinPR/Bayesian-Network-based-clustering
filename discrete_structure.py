@@ -142,7 +142,7 @@ def n_param(red, number_of_clusters, categories_df):
     print(f"[DEBUG] n_param returning {n}")
     return n
 
-
+#def sem(bn, dataframe, categories_df, clusters_names, max_iter=2, em_kmax=500, structlog_sample=500):
 def sem(bn, dataframe, categories_df, clusters_names, max_iter=2, em_kmax=5, structlog_sample=5):
     print("[DEBUG] Entering sem(...)")
     print(f"[DEBUG] sem parameters: max_iter={max_iter}, em_kmax={em_kmax}, structlog_sample={structlog_sample}")
