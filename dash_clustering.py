@@ -71,7 +71,8 @@ def plot_map_with_importance(maps_df, importances, df_categories):
     import io, base64
     import matplotlib.pyplot as plt
 
-    fig = plt.figure(figsize=(8, 8))
+    #fig = plt.figure(figsize=(8, 8))
+    fig = plt.figure(figsize=(12, 12), dpi=120)
     variables = list(maps_df.columns)  # e.g. ['Age', 'Sex', 'Income', ...]
     cluster_list = list(maps_df.index) # e.g. ['c1','c2']
 
