@@ -249,78 +249,107 @@ def ev_probability(bn, instances,cluster_names,df_categories, n=1000):  #Esta fu
 
 
 
-def importance_1(red,point,df_categories,clusters_names):  #importancia de la variable a través de variación de la propia variable
-                                                           #point en orden ancestral
+def importance_1(red, point, df_categories, clusters_names):
+    """Importancia de la variable mediante la variación de la propia variable
+       point en orden ancestral.
+    """
 
+    # Ojo: 'cluster' debe estar fuera de variables
     variables = red.nodes()
     variables.remove('cluster')
-    prob_posterior_map = posterior_probability(red, clusters_names, df_categories, point)#calculamos P(C | MAP)
 
+    # Calcula la probabilidad posterior del MAP
+    prob_posterior_map = posterior_probability(red, clusters_names, df_categories, point)
+    print("[DEBUG] prob_posterior_map =", prob_posterior_map)
+
+    # Orden ancestral
     ancestral_order = pb.Dag(red.nodes(), red.arcs()).topological_sort()
     ancestral_order.remove('cluster')
 
+    # Diccionario de importancias
     importance = {}
-    for k in range(len(ancestral_order)): #calculamos la importancia para cada variable.
-        distances = []
+
+    for k in range(len(ancestral_order)):
         var = ancestral_order[k]
+
+        # Construimos "instances" para ev_probability(...) sin la variable actual
         instances = {}
         lista = red.nodes()
         lista.remove('cluster')
         lista.remove(var)
         for variable in lista:
-            instances[variable] = point[ancestral_order.index(variable)]
+            # Toma el valor actual del MAP (point) para esa variable
+            idx_in_point = ancestral_order.index(variable)
+            instances[variable] = point[idx_in_point]
 
-        e_prob = ev_probability(red, instances, clusters_names,df_categories) #Como P(X_i | X_(-i))=P(X_i,X_(-i))/P(X_(-i)) calculamos P(X_(-i))
-        for category in df_categories[var]: #Ahora para cada categoría obtenemos de la variable de interes sustuimos su valor en el MAP y calculamos P(C|X) para calcular la distancia
-            #respecto de P(C| MAP)
+        # Calculamos P(X_(-i)) => e_prob
+        e_prob = ev_probability(red, instances, clusters_names, df_categories)
+        print(f"[DEBUG] var={var}: e_prob={e_prob:.6f}, df_categories[var]={df_categories[var]}")
+
+        # Recorremos categorías de la variable para ver la diferencia con point[k]
+        distances = []
+        for category in df_categories[var]:
+            # Debug: mostrar la categoría que estamos analizando
+            print(f"[DEBUG] var={var}, category={category}, MAP_category={point[k]}")
             if point[k] != category:
+                # ========== Cálculo de la Hellinger distance con esa categoría ==========
                 evidence = point.copy()
                 evidence[k] = category
+
+                # Calculamos prob posterior condicional P(C | esa evidencia)
                 lklh = []
                 for p_c in clusters_names:
-
                     instance = pd.DataFrame(columns=ancestral_order)
                     i = 0
                     for column in instance.columns:
-                        instance[column] = pd.Series(pd.Categorical([evidence[i]], categories=df_categories[column]))
-                        i = i + 1
+                        instance[column] = pd.Series(pd.Categorical([evidence[i]], 
+                                                    categories=df_categories[column]))
+                        i += 1
 
-                    instance['cluster'] = pd.Series(pd.Categorical([p_c], categories=clusters_names))
+                    instance['cluster'] = pd.Series(pd.Categorical([p_c], 
+                                                categories=clusters_names))
                     x = math.exp(red.logl(instance)[0])
-
                     lklh.append(x)
 
+                # normalizar
                 t = sum(lklh)
                 prob_posterior = [x / t for x in lklh]
 
+                # Distancia de Hellinger respecto a la posterior del MAP
                 d = hellinger_distance(prob_posterior_map, prob_posterior)
 
-
-                #Ahora calculamos P(X_i,X_(-i)) y multiplicamos la distancia por dicho valor. Deberiamos dividir también por P(X_(-i)) pero como es un valor fijo
-                #para todas las categorías lo añadimos posteriormente
-
-
+                # ===== Calculamos P(X_i, X_(-i)) =====
                 probability = 0
                 for p_c in clusters_names:
-                    data=pd.DataFrame()
-                    for instance in instances.keys():
-                        data[instance]=pd.Series(pd.Categorical([instances[instance]],categories=df_categories[instance]))
-                    data[var]=pd.Series(pd.Categorical([category],categories=df_categories[var]))
-                    data['cluster']=pd.Series(pd.Categorical([p_c],categories=clusters_names))
+                    data = pd.DataFrame()
+                    for inst_var, inst_val in instances.items():
+                        data[inst_var] = pd.Series(pd.Categorical([inst_val], 
+                                                categories=df_categories[inst_var]))
+                    data[var] = pd.Series(pd.Categorical([category], 
+                                         categories=df_categories[var]))
+                    data['cluster'] = pd.Series(pd.Categorical([p_c], 
+                                             categories=clusters_names))
 
-                    probability=probability+math.exp(red.logl(data)[0])
+                    probability += math.exp(red.logl(data)[0])
 
-                distances.append(d * probability)
+                # Añadimos el término a distances
+                product_val = d * probability
+                distances.append(product_val)
 
+                print(f"[DEBUG] var={var}, category={category}, d={d:.6f}, prob_sum={probability:.6f}, product={product_val:.6f}")
+            else:
+                print(f"[DEBUG] var={var}, category={category} == MAP_category => skipping.")
 
+        # Al terminar, revisamos si distances quedó vacío
+        print(f"[DEBUG] var={var}, final distances={distances}")
 
-        importance[var] = mean(distances)/e_prob
+        if not distances:
+            # Si no hay datos para calcular la media (caso 1 sola categoría o no se cumplió if)
+            print(f"[WARNING] var={var} => distances vacío; asignando 0 a importancia.")
+            importance[var] = 0
+        else:
+            importance[var] = mean(distances) / e_prob
+            print(f"[DEBUG] var={var}, importance={importance[var]:.6f}")
+
     return importance
-
-
-
-
-
-
-
 
