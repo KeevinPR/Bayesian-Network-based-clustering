@@ -26,7 +26,7 @@ from pybnesianCPT_to_df import from_CPT_to_df
 
 
 
-def joint_sampling(red,cluster_names,n=100000):  #esta funcion realiza un sampling de la Red Bayesiana de forma que obtenemos una muestra de la distribución conjunta de tamaño n
+def joint_sampling(red,cluster_names,n=100):  #esta funcion realiza un sampling de la Red Bayesiana de forma que obtenemos una muestra de la distribución conjunta de tamaño n
     ancestral_order = pb.Dag(red.nodes(), red.arcs()).topological_sort()
     samples = pd.DataFrame(columns=ancestral_order) #creamos el dataframe donde vamos a guardar los samples
     for i in range(n):
