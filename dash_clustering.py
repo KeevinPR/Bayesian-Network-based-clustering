@@ -377,10 +377,11 @@ def run_cluster_importance(
     all_values, all_ids, df_json
 ):
     print("[DEBUG] run_cluster_importance called.")
-    if not df_json:
-        return "No dataset found. Please upload a CSV or use the default dataset."
     if not n_clicks:
         raise dash.exceptions.PreventUpdate
+    if not df_json:
+        return "No dataset found. Please upload a CSV or use the default dataset."
+    
 
     # 1) Prepare DataFrame
     df = pd.read_json(df_json, orient='split')
@@ -472,12 +473,13 @@ def run_cluster_importance(
         html.P(f"Number of clusters = {k_clusters}"),
         html.P(f"Samples for inference = {n_samples}"),
         html.Hr(),
-        html.H5("Arcs in the Learned BN:"),
-        html.Ul([
-            html.Li(str(arc)) for arc in arcs_list
-        ]),
+        #List of arcs
+        #html.H5("Arcs in the Learned BN:"),
+        #html.Ul([
+        #    html.Li(str(arc)) for arc in arcs_list
+        #]),
         # Single BN figure
-        html.Img(src=dag_img_src, style={'maxWidth': '400px', 'display': 'block', 'margin': '0 auto'}),
+        html.Img(src=dag_img_src, className="zoomable", style={'maxWidth': '600px', 'display': 'block', 'margin': '0 auto'}),
 
         html.Hr(),
         html.H4("Individual Subcluster DAGs (Carousel)"),
@@ -485,7 +487,7 @@ def run_cluster_importance(
 
         html.Hr(),
         html.H5("Radar Chart of MAP Representatives + Importance"),
-        html.Img(src=radar_img_src, style={'maxWidth': '500px', 'display': 'block', 'margin': '0 auto'})
+        html.Img(src=radar_img_src, className="zoomable", style={'maxWidth': '600px', 'display': 'block', 'margin': '0 auto'})
     ])
 
     return layout_div
@@ -502,10 +504,11 @@ import dash_bootstrap_components as dbc
 )
 def run_cluster_only(n_clicks, k_clusters, df_json):
     # 1) Check for dataset availability
-    if not df_json:
-        return "No dataset found. Please upload a CSV or use the default dataset."
     if not n_clicks:
         raise dash.exceptions.PreventUpdate
+    if not df_json:
+        return "No dataset found. Please upload a CSV or use the default dataset."
+    
 
     # 2) Prepare the DataFrame
     df = pd.read_json(df_json, orient='split')
@@ -567,15 +570,16 @@ def run_cluster_only(n_clicks, k_clusters, df_json):
         html.H4("Clustering Completed (Network Only)"),
         html.P(f"Number of clusters = {k_clusters}"),
 
-        html.H5("Arcs:"),
-        html.Ul(
-            [html.Li(str(arc), style={'fontSize': '14px', 'marginBottom': '5px'}) for arc in arcs_list],
-            style={
-                'listStyleType': 'none',
-                'paddingLeft': '20px',
-                'margin': '0'
-            }
-        ),
+        #List of arcs
+        #html.H5("Arcs:"),
+        #html.Ul(
+        #    [html.Li(str(arc), style={'fontSize': '14px', 'marginBottom': '5px'}) for arc in arcs_list],
+        #    style={
+        #        'listStyleType': 'none',
+        #        'paddingLeft': '20px',
+        #        'margin': '0'
+        #    }
+        #),
 
         # Single BN figure
         html.Img(src=single_bn_src, className="zoomable", style={'maxWidth': '600px'}),
