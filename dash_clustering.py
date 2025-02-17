@@ -184,8 +184,8 @@ app.layout = dcc.Loading(
                 id='num-samples-input',
                 type='number',
                 value=100000,
-                min=1000,
-                step=1000,
+                min=100,
+                step=100,
                 style={'marginRight': '20px'}
             ),
             html.Br(),
