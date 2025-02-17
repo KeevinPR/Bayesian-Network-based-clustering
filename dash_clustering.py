@@ -361,6 +361,7 @@ def show_final_run_button(n_clicks, order_choice, all_values):
     print("[DEBUG] Continue clicked, showing the final run button.")
     return {'display': 'inline-block'}
 
+
 @app.callback(
     Output('output-area', 'children', allow_duplicate=True),
     Input('run-clustering-importance-button', 'n_clicks'),
@@ -376,13 +377,19 @@ def run_cluster_importance(
     n_clicks, k_clusters, n_samples, order_choice,
     all_values, all_ids, df_json
 ):
+    """
+    Runs clustering + importance analysis, then displays:
+     1) A single BN figure,
+     2) A carousel with subcluster DAGs,
+     3) The radar chart for MAP representatives + importance,
+     4) A textual list of each (variable, map_value, importance).
+    """
     print("[DEBUG] run_cluster_importance called.")
     if not n_clicks:
         raise dash.exceptions.PreventUpdate
     if not df_json:
         return "No dataset found. Please upload a CSV or use the default dataset."
     
-
     # 1) Prepare DataFrame
     df = pd.read_json(df_json, orient='split')
     for col in df.columns:
@@ -410,25 +417,31 @@ def run_cluster_importance(
     for var in df.columns:
         categories[var] = df[var].cat.categories.tolist()
 
-    # 4) Learn BN
+    # 4) Learn the BN
+    print("[DEBUG] Calling discrete_structure.sem(...)")
     best_network = discrete_structure.sem(bn_initial, df, categories, cluster_names)
 
     # 5) Single BN figure
+    print("[DEBUG] Plotting the main BN DAG.")
     dag_img_src = plot_bn_dag(best_network, "Cluster + Importance BN")
 
-    # 6) MAP Representatives + importance
+    # 6) Obtain MAP representatives + importance
+    print("[DEBUG] Calling get_MAP(...)")
     map_reps = discrete_analysis_hellinger.get_MAP(best_network, cluster_names, n=n_samples)
-
+    
+    # Prepare an ancestral order that excludes 'cluster' itself
     ancestral_order = list(pb.Dag(best_network.nodes(), best_network.arcs()).topological_sort())
     if 'cluster' in ancestral_order:
         ancestral_order.remove('cluster')
 
+    # Compute importance for each cluster
     importances_dict = {}
     for clus in cluster_names:
         row = map_reps.loc[clus]
         point_list = []
         for var in ancestral_order:
             val = row[var]
+            # If row[var] is a tuple (cat, prob), just keep the category
             if isinstance(val, tuple):
                 val = val[0]
             point_list.append(val)
@@ -437,16 +450,16 @@ def run_cluster_importance(
             best_network, point_list, categories, cluster_names
         )
         importances_dict[clus] = imp_clus
-
-    # 7) Build the per-cluster DAG images, using real importance
+    
+    # 7) Build the subcluster DAGs + carousel
+    print("[DEBUG] Building subcluster DAGs for each cluster.")
     cluster_images_list = clusters_dags_as_base64(best_network, importances_dict, cluster_names)
 
-    # 8) Create a carousel (just like run_cluster_only)
     import dash_bootstrap_components as dbc
     items = []
     for cname, img_src in zip(cluster_names, cluster_images_list):
         items.append({
-            "key": cname,  # unique key
+            "key": cname,
             "src": img_src,
             "header": f"Cluster {cname}",
             "caption": f"Subcluster DAG for {cname}"
@@ -460,12 +473,65 @@ def run_cluster_importance(
         style={"maxWidth": "600px", "margin": "0 auto"}
     )
 
-    # 9) Now the Radar chart
+    # 8) Plot the radar chart
+    print("[DEBUG] Plotting radar chart with MAP + importance.")
     df_categories = discrete_analysis_hellinger.df_to_dict(df)
     radar_img_src = plot_map_with_importance(map_reps, importances_dict, df_categories)
 
     arcs_list = list(best_network.arcs())
-    print(f"[DEBUG] Learned BN arcs: {arcs_list}")
+   
+    #Removing arcs showing 
+    #print(f"[DEBUG] Learned BN arcs: {arcs_list}")
+
+    # 9) Build a textual display of (var, map_value) + importance for each cluster
+    print("[DEBUG] Building textual display of MAP values + importance.")
+
+    # We'll collect each cluster's info in a list of Divs, each displayed as a column:
+    cluster_columns = []
+    for clus in cluster_names:
+        row = map_reps.loc[clus]
+        
+        # Build lines for each variable, but now as plain text in small Divs—no bullets:
+        lines = []
+        for var in ancestral_order:
+            chosen_val = row[var]
+            if isinstance(chosen_val, tuple):
+                chosen_val = chosen_val[0]
+            imp_val = importances_dict[clus].get(var, 0.0)
+            line_str = f"({var}, {chosen_val}) importance {imp_val:.4f}"
+            lines.append(
+                html.Div(line_str, style={'fontSize': '12px', 'marginBottom': '3px'})
+            )
+
+        # Wrap them in one Div for this cluster, with inline-block to place columns side by side:
+        cluster_div = html.Div(
+            children=[
+                html.H5(f"cluster {clus}", style={'fontSize': '14px', 'marginBottom': '8px'}),
+                *lines
+            ],
+            style={
+                'display': 'inline-block',
+                'verticalAlign': 'top',
+                'width': '250px',    # Adjust column width as needed
+                'margin': '10px',    # Spacing between columns
+                'fontFamily': 'Arial, sans-serif',
+                'border': '1px solid #ccc',  # optional border
+                'padding': '8px'
+            }
+        )
+        cluster_columns.append(cluster_div)
+
+    # A flex container for all columns:
+    map_importances_container = html.Div(
+        children=cluster_columns,
+        style={
+            'display': 'flex',
+            'flexWrap': 'wrap',
+            'justifyContent': 'center',
+            'alignItems': 'flex-start',
+            'marginTop': '20px'
+        }
+    )
 
     # 10) Build final layout
     layout_div = html.Div([
@@ -473,24 +539,35 @@ def run_cluster_importance(
         html.P(f"Number of clusters = {k_clusters}"),
         html.P(f"Samples for inference = {n_samples}"),
         html.Hr(),
-        #List of arcs
-        #html.H5("Arcs in the Learned BN:"),
-        #html.Ul([
-        #    html.Li(str(arc)) for arc in arcs_list
-        #]),
+
         # Single BN figure
-        html.Img(src=dag_img_src, className="zoomable", style={'maxWidth': '600px', 'display': 'block', 'margin': '0 auto'}),
+        html.Img(
+            src=dag_img_src,
+            className="zoomable",
+            style={'maxWidth': '600px', 'display': 'block', 'margin': '0 auto'}
+        ),
 
         html.Hr(),
         html.H4("Individual Subcluster DAGs (Carousel)"),
-        carousel,  # Insert the carousel here
+        carousel,
 
         html.Hr(),
         html.H5("Radar Chart of MAP Representatives + Importance"),
-        html.Img(src=radar_img_src, className="zoomable", style={'maxWidth': '600px', 'display': 'block', 'margin': '0 auto'})
-    ])
+        html.Img(
+            src=radar_img_src,
+            className="zoomable",
+            style={'maxWidth': '600px', 'display': 'block', 'margin': '0 auto'}
+        ),
 
+        # Here is where we show the textual lines for each cluster
+        html.Div([
+            html.H5("MAP + Importance by Cluster", style={'marginTop': '20px'}),
+                map_importances_container
+            ])
+    ])
+    print("[DEBUG] run_cluster_importance returning layout_div.")
     return layout_div
+
 
 from discrete_representation import clusters_dags_as_base64
 import dash_bootstrap_components as dbc
