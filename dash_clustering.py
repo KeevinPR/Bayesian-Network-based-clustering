@@ -67,47 +67,48 @@ def plot_map_with_importance(maps_df, importances, df_categories):
     importances: dict of {cluster_name: {variable: importance_value}}
     df_categories: from df_to_dict, e.g., discrete_analysis_hellinger.df_to_dict(df)
     """
-    print("[DEBUG] Entering plot_map_with_importance...")
     from radar_chart_discrete_categories import ComplexRadar
+    import io, base64
+    import matplotlib.pyplot as plt
 
     fig = plt.figure(figsize=(8, 8))
-    variables = list(maps_df.columns)
-    cluster_list = list(maps_df.index)
+    variables = list(maps_df.columns)  # e.g. ['Age', 'Sex', 'Income', ...]
+    cluster_list = list(maps_df.index) # e.g. ['c1','c2']
 
-    # Build min/max bounds for each variable based on how many categories exist
-    bounds = []
-    for var in variables:
-        cat_count = len(df_categories[var])
-        bounds.append([1, cat_count])  # categories start at 1 in your code
+    # 1) Instantiate the radar passing the dictionary df_categories as second arg
+    radar = ComplexRadar(fig, df_categories, show_scales=True)
 
-    radar = ComplexRadar(fig, variables, bounds, show_scales=True)
-
+    # 2) For each cluster (row in maps_df), build a dict {var -> chosen_category}
     for clus in cluster_list:
-        row_values = []
+        row_dict = {}
         for var in variables:
-            item = maps_df.loc[clus, var]
+            item = maps_df.loc[clus, var]  
+            # item might be a tuple (chosen_cat, probability) or just a category string
             if isinstance(item, tuple):
                 chosen_cat = item[0]
             else:
                 chosen_cat = item
 
-            code = df_categories[var][chosen_cat]
-            row_values.append(code)
-
+            row_dict[var] = chosen_cat
+        
         label_text = f"Cluster {clus}"
-        radar.plot(row_values, df_categories, label=label_text)
-        radar.fill(row_values, df_categories, alpha=0.2)
+        # Now we pass row_dict to .plot(...) and .fill(...)
+        # so that `_scale_data` can do df_categories[var][data[var]]
+        radar.plot(row_dict, df_categories, label=label_text)
+        radar.fill(row_dict, df_categories, alpha=0.2)
 
     radar.set_title("MAP + Importance Radar Chart", fontsize=12)
     radar.use_legend(loc='upper right')
 
+    # 3) Convert to base64
     buf = io.BytesIO()
     fig.savefig(buf, format='png')
     buf.seek(0)
     encoded = base64.b64encode(buf.read()).decode('utf-8')
     plt.close(fig)
-    print("[DEBUG] Leaving plot_map_with_importance.")
+
     return f"data:image/png;base64,{encoded}"
+
 
 
 # ====================== LAYOUT ======================
@@ -183,9 +184,9 @@ app.layout = dcc.Loading(
             dcc.Input(
                 id='num-samples-input',
                 type='number',
-                value=100000,
-                min=100,
-                step=100,
+                value=1000,
+                min=10,
+                step=10,
                 style={'marginRight': '20px'}
             ),
             html.Br(),
@@ -376,20 +377,17 @@ def run_cluster_importance(
     all_values, all_ids, df_json
 ):
     print("[DEBUG] run_cluster_importance called.")
-    print(f"[DEBUG] n_clicks={n_clicks}, k_clusters={k_clusters}, n_samples={n_samples}, order_choice={order_choice}")
     if not df_json:
-        print("[DEBUG] No dataset in stored-dataframe -> returning message.")
         return "No dataset found. Please upload a CSV or use the default dataset."
-    if n_clicks is None or n_clicks == 0:
-        print("[DEBUG] No clicks -> PreventUpdate.")
+    if not n_clicks:
         raise dash.exceptions.PreventUpdate
 
+    # 1) Prepare DataFrame
     df = pd.read_json(df_json, orient='split')
-    
     for col in df.columns:
         df[col] = df[col].astype(str).astype('category')
 
-    # Reorder columns if manual
+    # 2) Possibly reorder columns if manual
     if order_choice == 'manual':
         print("[DEBUG] Reordering columns manually.")
         var_positions = {}
@@ -399,25 +397,27 @@ def run_cluster_importance(
         new_col_order = [s[0] for s in sorted_vars]
         df = df[new_col_order]
     else:
-        print("[DEBUG] Keeping original column order or random/skip logic outside of manual mode.")
+        print("[DEBUG] Keeping original column order (or random/skip).")
 
-    print("[DEBUG] Building naive BN structure for cluster + importance.")
+    # 3) Build BN structure
+    cluster_names = [f'c{i}' for i in range(1, k_clusters + 1)]
     in_arcs = [('cluster', var) for var in df.columns]
     in_nodes = ['cluster'] + list(df.columns)
-    cluster_names = [f'c{i}' for i in range(1, k_clusters + 1)]
-    red_inicial = pb.DiscreteBN(in_nodes, in_arcs)
+    bn_initial = pb.DiscreteBN(in_nodes, in_arcs)
 
     categories = {'cluster': cluster_names}
     for var in df.columns:
         categories[var] = df[var].cat.categories.tolist()
 
-    print("[DEBUG] Calling discrete_structure.sem(...)")
-    best_network = discrete_structure.sem(red_inicial, df, categories, cluster_names)
+    # 4) Learn BN
+    best_network = discrete_structure.sem(bn_initial, df, categories, cluster_names)
 
-    print("[DEBUG] Calling get_MAP(...)")
+    # 5) Single BN figure
+    dag_img_src = plot_bn_dag(best_network, "Cluster + Importance BN")
+
+    # 6) MAP Representatives + importance
     map_reps = discrete_analysis_hellinger.get_MAP(best_network, cluster_names, n=n_samples)
 
-    print("[DEBUG] Computing importance for each cluster.")
     ancestral_order = list(pb.Dag(best_network.nodes(), best_network.arcs()).topological_sort())
     if 'cluster' in ancestral_order:
         ancestral_order.remove('cluster')
@@ -437,29 +437,57 @@ def run_cluster_importance(
         )
         importances_dict[clus] = imp_clus
 
-    print("[DEBUG] Building df_categories for radar chart.")
-    df_categories = discrete_analysis_hellinger.df_to_dict(df)
+    # 7) Build the per-cluster DAG images, using real importance
+    cluster_images_list = clusters_dags_as_base64(best_network, importances_dict, cluster_names)
 
-    print("[DEBUG] Plotting radar chart + DAG.")
+    # 8) Create a carousel (just like run_cluster_only)
+    import dash_bootstrap_components as dbc
+    items = []
+    for cname, img_src in zip(cluster_names, cluster_images_list):
+        items.append({
+            "key": cname,  # unique key
+            "src": img_src,
+            "header": f"Cluster {cname}",
+            "caption": f"Subcluster DAG for {cname}"
+        })
+    carousel = dbc.Carousel(
+        items=items,
+        controls=True,
+        indicators=False,
+        interval=None,
+        ride="carousel",
+        style={"maxWidth": "600px", "margin": "0 auto"}
+    )
+
+    # 9) Now the Radar chart
+    df_categories = discrete_analysis_hellinger.df_to_dict(df)
     radar_img_src = plot_map_with_importance(map_reps, importances_dict, df_categories)
-    dag_img_src = plot_bn_dag(best_network, "Cluster + Importance BN")
 
     arcs_list = list(best_network.arcs())
-    print(f"[DEBUG] Learned BN arcs (cluster+importance): {arcs_list}")
+    print(f"[DEBUG] Learned BN arcs: {arcs_list}")
 
+    # 10) Build final layout
     layout_div = html.Div([
         html.H4("Clustering + Importance Analysis Results"),
         html.P(f"Number of clusters = {k_clusters}"),
         html.P(f"Samples for inference = {n_samples}"),
         html.Hr(),
         html.H5("Arcs in the Learned BN:"),
-        html.Ul([html.Li(str(arc)) for arc in arcs_list]),
+        html.Ul([
+            html.Li(str(arc)) for arc in arcs_list
+        ]),
+        # Single BN figure
         html.Img(src=dag_img_src, style={'maxWidth': '400px', 'display': 'block', 'margin': '0 auto'}),
+
+        html.Hr(),
+        html.H4("Individual Subcluster DAGs (Carousel)"),
+        carousel,  # Insert the carousel here
+
         html.Hr(),
         html.H5("Radar Chart of MAP Representatives + Importance"),
         html.Img(src=radar_img_src, style={'maxWidth': '500px', 'display': 'block', 'margin': '0 auto'})
     ])
-    print("[DEBUG] run_cluster_importance returning layout_div.")
+
     return layout_div
 
 from discrete_representation import clusters_dags_as_base64
