@@ -48,7 +48,7 @@ def plot_bn_dag(bn: pb.DiscreteBN, title="Learned BN Structure"):
 
     buf = io.BytesIO()
     fig.tight_layout()
-    fig.savefig(buf, format='png')
+    fig.savefig(buf, format='png', bbox_inches='tight')
     buf.seek(0)
     encoded = base64.b64encode(buf.read()).decode('utf-8')
     plt.close(fig)
@@ -216,7 +216,6 @@ app.layout = dcc.Loading(
 
         # Output area
         html.Div(id='output-area', style={'textAlign': 'center'}),
-        html.Div(id='output-area-two', style={'textAlign': 'center'}),
 
         # dcc.Stores
         dcc.Store(id='stored-data'),
@@ -361,57 +360,6 @@ def show_final_run_button(n_clicks, order_choice, all_values):
     print("[DEBUG] Continue clicked, showing the final run button.")
     return {'display': 'inline-block'}
 
-
-@app.callback(
-    Output('output-area', 'children', allow_duplicate=True),
-    Input('run-clustering-button', 'n_clicks'),
-    State('num-clusters-input', 'value'),
-    State('stored-dataframe', 'data'),
-    prevent_initial_call='initial_duplicate'
-)
-def run_cluster_only(n_clicks, k_clusters, df_json):
-    print(f"[DEBUG] run_cluster_only called with n_clicks={n_clicks}, k_clusters={k_clusters}")
-    if not df_json:
-        print("[DEBUG] No dataset in stored-dataframe -> returning message.")
-        return "No dataset found. Please upload a CSV or use the default dataset."
-    if n_clicks is None or n_clicks == 0:
-        print("[DEBUG] No clicks -> PreventUpdate.")
-        raise dash.exceptions.PreventUpdate
-
-    df = pd.read_json(df_json, orient='split')
-
-    # Convert columns to category again
-    for col in df.columns:
-        df[col] = df[col].astype(str).astype('category')
-
-    print(f"[DEBUG] Building naive BN for cluster-only. DataFrame shape={df.shape}")
-    in_arcs = [('cluster', var) for var in df.columns]
-    in_nodes = ['cluster'] + list(df.columns)
-    cluster_names = [f'c{i}' for i in range(1, k_clusters + 1)]
-
-    red_inicial = pb.DiscreteBN(in_nodes, in_arcs)
-
-    # Build categories dictionary
-    categories = {'cluster': cluster_names}
-    for var in df.columns:
-        categories[var] = df[var].cat.categories.tolist()
-
-    print("[DEBUG] Calling discrete_structure.sem(...)")
-    best_network = discrete_structure.sem(red_inicial, df, categories, cluster_names)
-    arcs_list = list(best_network.arcs())
-    print(f"[DEBUG] Learned BN arcs: {arcs_list}")
-
-    dag_img_src = plot_bn_dag(best_network, "Learned BN (Cluster Only)")
-    result_divs = [
-        html.H4("Clustering Completed (Network Only)"),
-        html.P(f"Number of clusters = {k_clusters}"),
-        html.H5("Arcs:"),
-        html.Ul([html.Li(str(arc)) for arc in arcs_list]),
-        html.Img(src=dag_img_src, style={'maxWidth': '500px'})
-    ]
-    return result_divs
-
-
 @app.callback(
     Output('output-area', 'children', allow_duplicate=True),
     Input('run-clustering-importance-button', 'n_clicks'),
@@ -514,73 +462,103 @@ def run_cluster_importance(
     print("[DEBUG] run_cluster_importance returning layout_div.")
     return layout_div
 
-from discrete_representation import clusters_dag_as_base64
+from discrete_representation import clusters_dags_as_base64
+import dash_bootstrap_components as dbc
 
 @app.callback(
-    Output('output-area-two', 'children'),
+    Output('output-area', 'children'),
     Input('run-clustering-button', 'n_clicks'),
     State('num-clusters-input', 'value'),
     State('stored-dataframe', 'data'),
     prevent_initial_call=True
 )
 def run_cluster_only(n_clicks, k_clusters, df_json):
+    # 1) Check for dataset availability
     if not df_json:
         return "No dataset found. Please upload a CSV or use the default dataset."
     if not n_clicks:
         raise dash.exceptions.PreventUpdate
 
-    # 1) Prepare your dataframe
+    # 2) Prepare the DataFrame
     df = pd.read_json(df_json, orient='split')
     for col in df.columns:
         df[col] = df[col].astype(str).astype('category')
 
-    # 2) Build BN
-    cluster_names = [f'c{i}' for i in range(1, k_clusters+1)]
+    # 3) Build the BN
+    cluster_names = [f'c{i}' for i in range(1, k_clusters + 1)]
     in_arcs = [('cluster', col) for col in df.columns]
     in_nodes = ['cluster'] + list(df.columns)
     bn_initial = pb.DiscreteBN(in_nodes, in_arcs)
 
-    # categories dict
+    # 4) Categories dictionary
     categories = {'cluster': cluster_names}
     for var in df.columns:
         categories[var] = df[var].cat.categories.tolist()
 
-    # 3) Call your SEM
+    # 5) Train/learn the BN structure
     best_network = discrete_structure.sem(bn_initial, df, categories, cluster_names)
-    
-    # 4) Convert arcs to an image
+
+    # 6) Single BN figure
     single_bn_src = plot_bn_dag(best_network, "Learned BN (Cluster Only)")
 
-    # 5) If you want "clusters_dag" style subplots, we need an 'importance' dict
-    #    If you are ignoring importance, just feed zeros. E.g.:
+    # 7) Dummy importance (or real) for each cluster
     dummy_importance = {}
     for c in cluster_names:
-        # For each cluster, we have a dict of node->value. We'll just do random or all zero
-        # random approach:
         dummy_importance[c] = {}
         for node in best_network.nodes():
             dummy_importance[c][node] = np.random.random()
-        # or if you want them all =0 => dummy_importance[c][node] = 0
 
-    # 6) Build side-by-side subplots with your code
-    subplots_encoded = clusters_dag_as_base64(best_network, dummy_importance, cluster_names)
-    subplots_img_src = "data:image/png;base64," + subplots_encoded
+    # 8) One DAG image per cluster
+    cluster_images_list = clusters_dags_as_base64(best_network, dummy_importance, cluster_names)
 
-    # 7) Return in the layout
+    # 9) Build `items` list for dbc.Carousel
+    items = []
+    for cname, img_src in zip(cluster_names, cluster_images_list):
+        items.append({
+            "key": cname,          # unique key
+            "src": img_src,        # base64 image as "src"
+            "header": f"Cluster {cname}",
+            "caption": f"Subcluster DAG for {cname}"
+        })
+    
+    # Create a Carousel component
+    carousel = dbc.Carousel(
+        items=items,
+        controls=True,        # show left/right arrows
+        indicators=False,      # show clickable indicators at bottom
+        interval=None,        # set to None to disable auto-play
+        ride="carousel",      # or remove "ride" for a static carousel
+        style={"maxWidth": "600px", "margin": "0 auto"},
+        #className="clustering-carousel"
+    )
+
     arcs_list = list(best_network.arcs())
+
+    # 10) Return layout with single BN and a carousel for subclusters
     return html.Div([
         html.H4("Clustering Completed (Network Only)"),
         html.P(f"Number of clusters = {k_clusters}"),
+
         html.H5("Arcs:"),
-        html.Ul([html.Li(str(arc)) for arc in arcs_list]),
+        html.Ul(
+            [html.Li(str(arc), style={'fontSize': '14px', 'marginBottom': '5px'}) for arc in arcs_list],
+            style={
+                'listStyleType': 'none',
+                'paddingLeft': '20px',
+                'margin': '0'
+            }
+        ),
 
         # Single BN figure
-        html.Img(src=single_bn_src, style={'maxWidth': '400px'}),
-        
+        html.Img(src=single_bn_src, className="zoomable", style={'maxWidth': '600px'}),
+
         html.Hr(),
-        html.H4("Side-by-Side Clusters Dag"),
-        html.Img(src=subplots_img_src, style={'maxWidth': '1200px'})
+        html.H4("Individual Subcluster DAGs (Carousel)"),
+        
+        # The carousel goes here:
+        carousel
     ])
+    
 if __name__ == '__main__':
     print("[DEBUG] Starting Dash server on port 8055...")
     app.run_server(debug=True, host='0.0.0.0', port=8055)
