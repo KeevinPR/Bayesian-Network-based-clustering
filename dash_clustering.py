@@ -72,7 +72,7 @@ def plot_map_with_importance(maps_df, importances, df_categories):
     import matplotlib.pyplot as plt
 
     #fig = plt.figure(figsize=(8, 8))
-    fig = plt.figure(figsize=(12, 12), dpi=120)
+    fig = plt.figure(figsize=(8, 8), dpi=120)
     variables = list(maps_df.columns)  # e.g. ['Age', 'Sex', 'Income', ...]
     cluster_list = list(maps_df.index) # e.g. ['c1','c2']
 
@@ -98,12 +98,13 @@ def plot_map_with_importance(maps_df, importances, df_categories):
         radar.plot(row_dict, df_categories, label=label_text)
         radar.fill(row_dict, df_categories, alpha=0.2)
 
-    radar.set_title("MAP + Importance Radar Chart", fontsize=12)
+    radar.set_title("MAP + Importance Radar Chart", fontsize=12, pad=40)
     radar.use_legend(loc='upper right')
 
     # 3) Convert to base64
     buf = io.BytesIO()
-    fig.savefig(buf, format='png')
+    #fig.savefig(buf, format='png')
+    fig.savefig(buf, format='png', bbox_inches='tight') #Trims extra margins around the final image
     buf.seek(0)
     encoded = base64.b64encode(buf.read()).decode('utf-8')
     plt.close(fig)
