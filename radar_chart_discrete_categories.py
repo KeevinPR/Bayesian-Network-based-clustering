@@ -25,7 +25,8 @@ class ComplexRadar():
         # Calculate angles and create for each variable an axes
         # Consider here the trick with having the first axes element twice (len+1)
         angles = np.arange(0, 360, 360. / len(df_categories.keys()))
-        axes = [fig.add_axes([0.3, 0.4, 0.4,0.4], polar=True, label="axes{}".format(i)) for i in
+        #axes = [fig.add_axes([0.3, 0.4, 0.4,0.4], polar=True, label="axes{}".format(i)) for i in
+        axes = [fig.add_axes([0.2, 0.3, 0.7, 0.7], polar=True, label="axes{}".format(i)) for i in        
                 range(len(df_categories.keys()) +1)]
 
         # Ensure clockwise rotation (first variable at the top N)
