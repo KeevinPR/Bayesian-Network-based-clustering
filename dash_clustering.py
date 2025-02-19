@@ -300,6 +300,14 @@ def parse_to_dataframe(raw_text):
     print("[DEBUG] Converting raw_text to DataFrame...")
     df = pd.read_csv(io.StringIO(raw_text), dtype=str)
     
+    # Skip the first column in case it's an ID or something.
+    # This slices rows [:], columns [1:] => keep all rows, drop col index 0
+    df = df.iloc[:, 1:]  
+
+    # Convert every column to category
+    for col in df.columns:
+        df[col] = df[col].astype(str).astype('category')
+    
     # Strip column names
     df.columns = [c.strip() for c in df.columns]
 
