@@ -41,7 +41,16 @@ def plot_bn_dag(bn: pb.DiscreteBN, title="Learned BN Structure"):
     pos = nx.spring_layout(G, seed=42)  # or any layout you prefer
     nx.draw_networkx_nodes(G, pos, ax=ax, node_color='skyblue', node_size=800, edgecolors='k')
     nx.draw_networkx_labels(G, pos, ax=ax, font_size=8)
-    nx.draw_networkx_edges(G, pos, ax=ax, arrowstyle='->', arrowsize=10)
+    nx.draw_networkx_edges(
+        G,
+        pos,
+        ax=ax,
+        arrows=True,               # ensure arrow heads
+        arrowstyle='-|>',          # a more pointy arrow style
+        arrowsize=20,              # larger arrow head
+        min_source_margin=10,      # space from node boundary
+        min_target_margin=10
+    )
 
     ax.set_title(title, fontsize=12)
     ax.set_axis_off()
