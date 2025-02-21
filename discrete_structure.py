@@ -7,6 +7,7 @@ from numpy.random import choice
 import random
 
 def EM(red, dataframe, clusters_names, kmax=100):
+#def EM(red, dataframe, clusters_names, kmax=10):
     print("[DEBUG] Entering EM(...)")
     print(f"[DEBUG] EM parameters: kmax={kmax}, #clusters={len(clusters_names)}, dataframe.shape={dataframe.shape}")
     k = 0
