@@ -51,7 +51,8 @@ def joint_sampling(red,cluster_names,n=100):  #esta funcion realiza un sampling 
         samples = pd.concat([samples, x]) #añadimos el sample al dataframe
     return samples
 
-def get_MAP(red,clusters_names,n=200000): #Esta función nos devuelve el map dado cada cluster, es decir, el representante de cada cluster. La inferencia se realiza
+#def get_MAP(red,clusters_names,n=200000): #Esta función nos devuelve el map dado cada cluster, es decir, el representante de cada cluster. La inferencia se realiza
+def get_MAP(red,clusters_names,n=2000): #Esta función nos devuelve el map dado cada cluster, es decir, el representante de cada cluster. La inferencia se realiza
     #mediante probabilistic logic sampling. Para ello se toma una muestra de la distribución conjunta (joint_sampling) y nos quedamos con los samples que necesitamos.
     MAP = pd.DataFrame()
     sample=joint_sampling(red,clusters_names,n) #obtenemos una muestra de la distribución conjunta
