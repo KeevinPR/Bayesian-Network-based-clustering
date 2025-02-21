@@ -22,7 +22,10 @@ import pybnesianCPT_to_df
 
 app = dash.Dash(
     __name__,
+    
+    #Optional
     requests_pathname_prefix='/Model/LearningFromData/ClusteringDash/',
+    
     external_stylesheets=[dbc.themes.BOOTSTRAP],
     suppress_callback_exceptions=True
 )
@@ -689,4 +692,5 @@ def run_cluster_only(n_clicks, k_clusters, df_json):
     
 if __name__ == '__main__':
     print("[DEBUG] Starting Dash server on port 8055...")
+    #Default port is 8050
     app.run_server(debug=True, host='0.0.0.0', port=8055)
