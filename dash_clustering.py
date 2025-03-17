@@ -30,6 +30,7 @@ app = dash.Dash(
     suppress_callback_exceptions=True
 )
 
+server = app.server
 
 ############################################################
 # HELPER: Make a DAG figure from a learned BN using networkx
