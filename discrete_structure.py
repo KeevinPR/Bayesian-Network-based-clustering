@@ -8,29 +8,18 @@ from multiprocessing import Pool
 import itertools
 from concurrent.futures import ProcessPoolExecutor
 
+#Tiene completado de dataset
 def EM(red, dataframe, clusters_names, kmax=100):
-#def EM(red, dataframe, clusters_names, kmax=10):
-    print("[DEBUG] Entering EM(...)")
-    print(f"[DEBUG] EM parameters: kmax={kmax}, #clusters={len(clusters_names)}, dataframe.shape={dataframe.shape}")
     k = 0
     rb = red.clone()
 
     df = dataframe.copy()
-    # Instanciamos los parámetros de la variable cluster, 
+    # Instanciamos los parámetros de la variable cluster, como se va a hacer stochastic EM en vez de fijar los parámetros simplemente sampleamos una muestra de la variable cluster
     # para parámetros sampleados de una uniforme.
-<<<<<<< HEAD
-    print("[DEBUG] EM: Initializing cluster distribution randomly.")
-    probability_distribution = [np.random.uniform() for _ in range(len(clusters_names))]
-    ini_clust = choice(
-        clusters_names, df.shape[0],
-        p=[x / sum(probability_distribution) for x in probability_distribution]
-    )
-=======
 
     probability_distribution = [np.random.uniform() for i in range(len(clusters_names))]
     ini_clust = weighted_choice(clusters_names, probability_distribution)
 
->>>>>>> ad00e2d (Updated customers.py and discrete_hellinger and discrete_structure with preprocessing and parallelized sem function)
 
     df['cluster'] = ini_clust
     #Dataframe completation
@@ -47,44 +36,13 @@ def EM(red, dataframe, clusters_names, kmax=100):
     for var in df.columns:
         df[var] = df[var].astype('category')
 
-    # Con esta muestra sampleada hacemos el primer fit de la red utilizando pybnesian.
+    # Fit
+    # Con esta muestra sampleada hacemos el primer fit de la red utilizando la libreria de pybnesian.
     rb.fit(df)
-    print("[DEBUG] EM: Done initial fit with random cluster assignment.")
 
     # Comenzamos las iteraciones del algoritmo
     while k < kmax:
-        if k % 10 == 0:
-            print(f"[DEBUG] EM iteration k={k}/{kmax}")
 
-<<<<<<< HEAD
-        new_c = []  # nueva muestra sampleada de P(C|X)
-        logl = []   # listas de loglikelihoods para cada punto con cada cluster
-        df = dataframe.copy()
-
-        # para cada cluster añadimos una columna 'cluster' y calculamos loglikelihood
-        for cluster in clusters_names:
-            c = [cluster]*df.shape[0]
-            df['cluster'] = pd.Series(pd.Categorical(c, categories=clusters_names))
-            log_vals = rb.logl(df).tolist()
-            logl.append(log_vals)
-
-        # E-step: sampleamos una nueva asignación de clusters
-        for row_idx in range(df.shape[0]):
-            lklh = []
-            for c_idx in range(len(clusters_names)):
-                x_val = math.exp(logl[c_idx][row_idx])
-                lklh.append(x_val)
-            total = sum(lklh)
-            prob_posterior = [val / total for val in lklh]
-            sampled_cluster = np.random.choice(np.asarray(clusters_names), p=prob_posterior)
-            new_c.append(sampled_cluster)
-
-        df['cluster'] = new_c
-        # completar dataset
-        categor = []
-        for var in dataframe.columns:
-            categor.append(dataframe[var].cat.categories.tolist())
-=======
         df = dataframe.copy()
         logl = parallel_compute_logl(clusters_names, df, rb) # esta lista contiene las listas de los loglikelihoods para cada punto del dataframe con cada posible cluster: P(c'k',X)
         # Este loglikelihood se utilizará para el cálculo de P(C|X)=P(C,X)/P(X). Como C es categórica con elevar e al loglikelhood tenemos P(C,X) y normalizando P(C|X)
@@ -95,7 +53,6 @@ def EM(red, dataframe, clusters_names, kmax=100):
         #Dataframe completation
         # Prepare categories for combinations
         categor = [dataframe[var].cat.categories.tolist() for var in dataframe.columns]
->>>>>>> ad00e2d (Updated customers.py and discrete_hellinger and discrete_structure with preprocessing and parallelized sem function)
         categor.append(clusters_names)
 
         # Generate combinations in parallel
@@ -106,90 +63,58 @@ def EM(red, dataframe, clusters_names, kmax=100):
 
         for var in df.columns:
             df[var] = df[var].astype('category')
-
-        # M-step: fit de la red
+        # Fit
+        # Con esta muestra sampleada hacemos el fit de la red utilizando la libreria de pybnesian.
         rb.fit(df)
-        # Optional second fit
-        rb_temp = red.clone()
-        rb_temp.fit(df)
-        rb = rb_temp
+        rb = red.clone()
+        rb.fit(df)
+        k = k + 1
 
-        k += 1
-
-    print(f"[DEBUG] Exiting EM(...). Final iteration was k={k}.")
     return rb
 
 
-<<<<<<< HEAD
-def structure_logl(red, dataframe, clusters_names, sample=20):
-    print("[DEBUG] Entering structure_logl(...)")
-=======
 '''def structure_logl(red, dataframe, clusters_names, sample=20): #esta función estima el expected loglikelihood de los datos.
     posterioris_x = []
->>>>>>> ad00e2d (Updated customers.py and discrete_hellinger and discrete_structure with preprocessing and parallelized sem function)
     rb = red.clone()
+    logl = []  # esta lista contiene las listas de los loglikelihoods para cada punto del dataframe con cada posible cluster: P(c'k',X)
+    slogl = []  # esta lista contiene la suma de los loglikelihood de cada punto del dataframe para cada muestra de 'clusters' sampleada de P(C|X)
     df = dataframe.copy()
-    logl = []  
-    slogl = []  # suma de loglikelihood para cada muestra
 
-    # Para cada cluster, añadimos la columna 'cluster' para calcular P(c'k',X)
-    for cluster in clusters_names:
-        c = [cluster]*df.shape[0]
+    for cluster in clusters_names:  # para cada cluster añadimos una columna al dataframe con el cluster dado para poder calcular P(c'k',X)
+
+        c = [cluster for i in range(df.shape[0])]
         df['cluster'] = pd.Series(pd.Categorical(c, categories=clusters_names))
-        logl_vals = rb.logl(df).tolist()
-        logl.append(logl_vals)
+        logl.append(rb.logl(df).tolist())
 
-    # Calculamos los posteriores P(C|X)
-    posterioris_x = []
-    for row_idx in range(df.shape[0]):
+    for row in range(df.shape[0]):
         lklh = []
-        for c_idx, _ in enumerate(clusters_names):
-            x_val = math.exp(logl[c_idx][row_idx])
-            lklh.append(x_val)
-        total = sum(lklh)
-        prob_posterior = [val / total for val in lklh]
+        for cluster in range(len(clusters_names)):
+            x = math.exp(logl[cluster][row])
+            lklh.append(x)
+        t = sum(lklh)
+        prob_posterior = [x / t for x in lklh]
         posterioris_x.append(prob_posterior)
 
-    # Realizamos 'sample' para estimar la loglikelihood esperada
-    for s_i in range(sample):
-        if s_i % 5 == 0:
-            print(f"[DEBUG] structure_logl: sample iteration s_i={s_i}/{sample}")
+    for i in range(0, sample):
         new_c = []
         df = dataframe.copy()
-        for row_idx in range(df.shape[0]):
-            new_c.append(np.random.choice(np.asarray(clusters_names), p=posterioris_x[row_idx]))
-        df['cluster'] = pd.Series(pd.Categorical(new_c, categories=clusters_names))
+        for k in range(df.shape[0]):
+            new_c.append(np.random.choice(np.asarray(clusters_names), p=posterioris_x[k]))
+        new_c = pd.Series(pd.Categorical(new_c, categories=clusters_names))
+        df['cluster'] = new_c
 
         slogl.append(red.slogl(df))
 
-<<<<<<< HEAD
-    avg_slogl = sum(slogl) / len(slogl)
-    print("[DEBUG] Leaving structure_logl(...)")
-    return avg_slogl
-=======
     return sum(slogl) / len(slogl)'''
->>>>>>> ad00e2d (Updated customers.py and discrete_hellinger and discrete_structure with preprocessing and parallelized sem function)
 
 
-def n_param(red, number_of_clusters, categories_df):
-    print("[DEBUG] Entering n_param(...)")
-    # Dado una red, el nº de clusters y las categorías de cada variable,
-    # calculamos el nº de parámetros estimados.
-    n = number_of_clusters - 1  # variable cluster => (clusters-1) parámetros
-    for var in red.children('cluster'):
-        n += (red.num_parents(var)) * (len(categories_df[var]) - 1)
-    print(f"[DEBUG] n_param returning {n}")
+def n_param(red, number_of_clusters,categories_df):  # dado una red, el nº de clusters y las categorías de cada variable (es inaccesible por pybnesian) calculamos el nº de parámetros estimados
+    n = number_of_clusters - 1  # comenzamos con el nº de parámetros de la variable cluster que como bien sabemos es number_clusters-1 debido a que trabajamos con un TAN
+    for var in red.children('cluster'):  # como todos son hijos de cluster accedemos a las variables de esta forma.
+        n = n + (red.num_parents(var)) * (len(categories_df[var]) - 1)
+
     return n
 
-<<<<<<< HEAD
-#def sem(bn, dataframe, categories_df, clusters_names, max_iter=2, em_kmax=500, structlog_sample=500):
-def sem(bn, dataframe, categories_df, clusters_names, max_iter=2, em_kmax=5, structlog_sample=5):
-    print("[DEBUG] Entering sem(...)")
-    print(f"[DEBUG] sem parameters: max_iter={max_iter}, em_kmax={em_kmax}, structlog_sample={structlog_sample}")
-    print("[DEBUG] Running initial EM (Naive Bayes).")
-    # Comenzamos estimando la red naive bayes
-    clgbn = EM(bn, dataframe, clusters_names, em_kmax)
-=======
 
 #Parallelized with Pool
 '''def structure_logl(M_h, M_n_h, dataframe, clusters_names): #esta función estima el expected loglikelihood de los datos.
@@ -232,38 +157,22 @@ def structure_logl(M_h, M_n_h, dataframe, clusters_names): #esta función estima
 
 def sem(bn, dataframe, categories_df, clusters_names, max_iter=2, em_kmax=500):
     clgbn = EM(bn, dataframe, clusters_names, em_kmax)  # comenzamos estimando la red naive bayes
->>>>>>> ad00e2d (Updated customers.py and discrete_hellinger and discrete_structure with preprocessing and parallelized sem function)
     best = clgbn.clone()
-    i = 0
+    i = 0  # controla cuando se llega a un punto estacionario el máximo nº de iteraciones a realizar
     df = dataframe.copy()
-<<<<<<< HEAD
-=======
     BIC = -2 * structure_logl(clgbn, clgbn, df, clusters_names) + math.log(df.shape[0]) * n_param(clgbn,len(clusters_names),categories_df)  # bic de la primera red naive
->>>>>>> ad00e2d (Updated customers.py and discrete_hellinger and discrete_structure with preprocessing and parallelized sem function)
 
-    # BIC de la primera red naive
-    initial_logl = structure_logl(clgbn, df, clusters_names, structlog_sample)
-    BIC = -2*initial_logl + math.log(df.shape[0]) * n_param(clgbn, len(clusters_names), categories_df)
-    print(f"[DEBUG] Initial BIC={BIC}")
 
-    participant_nodes = list(df.columns.copy())
-    possible_arcs = list(itertools.permutations(participant_nodes, 2))
-    print(f"[DEBUG] Number of possible arcs to check: {len(possible_arcs)}")
+    print(BIC)
+    participant_nodes = list(df.columns.copy())  # Nodos de la red
+    possible_arcs = list(itertools.permutations(participant_nodes,2))  # Posibles parejas de arcos entre los nodos de la red salvo cluster
 
-    # Algoritmo sem
+    # Comenzamos el algoritmo sem
     while i < max_iter:
-        print(f"[DEBUG] SEM outer loop iteration i={i}/{max_iter}. Current BIC={BIC}")
-        s = 0
-        k = 0
-        random.shuffle(possible_arcs)
-
-        # 1) Intentamos añadir arcos
+        s = 0  # controla si se ha mejorado en la iteración
+        k = 0  # lo utilizamos para ir recorriendo la lista de posibles acciones (en este caso añadir arco)
+        random.shuffle(possible_arcs)  # mezclamos aleatoriamente los posibles arcos que se pueden introducir
         while k < len(possible_arcs):
-<<<<<<< HEAD
-            p_node, c_node = possible_arcs[k]
-            if clgbn.can_add_arc(p_node, c_node):
-                print(f"[DEBUG] Trying add_arc({p_node}->{c_node}). k={k}")
-=======
 
             if clgbn.can_add_arc(possible_arcs[k][0], possible_arcs[k][1]):  # comprobamos si el arco puede ser añadido
                 red = pb.DiscreteBN(nodes=clgbn.nodes(),arcs=clgbn.arcs())  # en caso de que pueda ser añadido generamos una nueva red con el arco añadido, estimamos parámetros y comparamos BIC
@@ -293,103 +202,52 @@ def sem(bn, dataframe, categories_df, clusters_names, max_iter=2, em_kmax=500):
 
         while k < len(possible):
             if clgbn.can_flip_arc(possible[k][0], possible[k][1]):  # si se puede invertir el arco de nuevo probamos y comparamos si se mejora el BIC
->>>>>>> ad00e2d (Updated customers.py and discrete_hellinger and discrete_structure with preprocessing and parallelized sem function)
                 red = pb.DiscreteBN(nodes=clgbn.nodes(), arcs=clgbn.arcs())
-                red.add_arc(p_node, c_node)
+                red.flip_arc(possible[k][0], possible[k][1])
                 red = EM(red, df, clusters_names, em_kmax)
-<<<<<<< HEAD
-=======
                 l = -2 * structure_logl(red, clgbn, df, clusters_names) + math.log(df.shape[0]) * n_param(red, len(clusters_names), categories_df)
->>>>>>> ad00e2d (Updated customers.py and discrete_hellinger and discrete_structure with preprocessing and parallelized sem function)
 
-                new_logl = structure_logl(red, df, clusters_names, structlog_sample)
-                new_BIC = -2*new_logl + math.log(df.shape[0])*n_param(red, len(clusters_names), categories_df)
-                if new_BIC >= BIC:
-                    k += 1
+
+                if l >= BIC:
+                    k = k + 1
                 else:
-                    print(f"[DEBUG] add_arc improved BIC from {BIC} to {new_BIC}")
-                    BIC = new_BIC
+                    k = len(possible)
+                    BIC = l
                     clgbn = red
                     best = clgbn.clone()
-                    s += 1
-                    k = len(possible_arcs)  # break out
+                    s = s + 1
             else:
-                k += 1
+                k = k + 1
 
-        # 2) Intentamos invertir arcos
         k = 0
-        possible = list(clgbn.arcs())
+        possible = list(
+            clgbn.arcs())  # de nuevo queremos eliminar arcos por ello los candidatos son los arcos ya existentes salvo los que no se deben eliminar (cluster,variable)
         for element in participant_nodes:
             if ('cluster', element) in possible:
                 possible.remove(('cluster', element))
         random.shuffle(possible)
 
         while k < len(possible):
-<<<<<<< HEAD
-            p_node, c_node = possible[k]
-            if clgbn.can_flip_arc(p_node, c_node):
-                print(f"[DEBUG] Trying flip_arc({p_node}->{c_node}). k={k}")
-                red = pb.DiscreteBN(nodes=clgbn.nodes(), arcs=clgbn.arcs())
-                red.flip_arc(p_node, c_node)
-                red = EM(red, df, clusters_names, em_kmax)
-=======
             red = pb.DiscreteBN(nodes=clgbn.nodes(), arcs=clgbn.arcs())
             red.remove_arc(possible[k][0], possible[k][1])
             red = EM(red, df, clusters_names, em_kmax)
             l = -2 * structure_logl(red, clgbn, df, clusters_names) + math.log(df.shape[0]) * n_param(red,len(clusters_names),categories_df)
->>>>>>> ad00e2d (Updated customers.py and discrete_hellinger and discrete_structure with preprocessing and parallelized sem function)
 
-                new_logl = structure_logl(red, df, clusters_names, structlog_sample)
-                new_BIC = -2*new_logl + math.log(df.shape[0])*n_param(red, len(clusters_names), categories_df)
-                if new_BIC >= BIC:
-                    k += 1
-                else:
-                    print(f"[DEBUG] flip_arc improved BIC from {BIC} to {new_BIC}")
-                    BIC = new_BIC
-                    clgbn = red
-                    best = clgbn.clone()
-                    s += 1
-                    k = len(possible)
+            if l >= BIC:
+                k = k + 1
             else:
-                k += 1
-
-        # 3) Intentamos eliminar arcos
-        k = 0
-        possible = list(clgbn.arcs())
-        for element in participant_nodes:
-            if ('cluster', element) in possible:
-                possible.remove(('cluster', element))
-        random.shuffle(possible)
-
-        while k < len(possible):
-            p_node, c_node = possible[k]
-            print(f"[DEBUG] Trying remove_arc({p_node}->{c_node}). k={k}")
-            red = pb.DiscreteBN(nodes=clgbn.nodes(), arcs=clgbn.arcs())
-            red.remove_arc(p_node, c_node)
-            red = EM(red, df, clusters_names, em_kmax)
-
-            new_logl = structure_logl(red, df, clusters_names, structlog_sample)
-            new_BIC = -2*new_logl + math.log(df.shape[0])*n_param(red, len(clusters_names), categories_df)
-            if new_BIC >= BIC:
-                k += 1
-            else:
-                print(f"[DEBUG] remove_arc improved BIC from {BIC} to {new_BIC}")
-                BIC = new_BIC
+                k = len(possible)
+                BIC = l
                 clgbn = red
                 best = clgbn.clone()
-                s += 1
-                k = len(possible)
+                s = s + 1
 
-        print(f"[DEBUG] End of iteration i={i}, BIC={BIC}, s={s}")
-        if s == 0:
-            i += 1
+        print(BIC)
+        if s == 0:  # si no se mejora comienza el contador de maxiter
+            i = i + 1
         else:
             i = 0
 
-<<<<<<< HEAD
-    print("[DEBUG] Exiting sem(...). Returning best BN.")
-    return best
-=======
     return best
 
 
@@ -559,4 +417,3 @@ def compute_row_contribution(row_index, df, rb_n_h, rb_h, clusters_names):
         row_sum += posterior_prob * logl_h
 
     return row_sum
->>>>>>> ad00e2d (Updated customers.py and discrete_hellinger and discrete_structure with preprocessing and parallelized sem function)

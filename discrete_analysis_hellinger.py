@@ -28,16 +28,11 @@ from operator import itemgetter
 import math
 
 
-<<<<<<< HEAD
-#def joint_sampling(red,cluster_names,n=100000)
-def joint_sampling(red,cluster_names,n=100):  #esta funcion realiza un sampling de la Red Bayesiana de forma que obtenemos una muestra de la distribución conjunta de tamaño n
-=======
 
 def joint_sampling(red,cluster_names,n=100000):  #esta funcion realiza un sampling de la Red Bayesiana de forma que obtenemos una muestra de la distribución conjunta de tamaño n
     """
     Parallelized version of joint_sampling using dynamic task scheduling.
     """
->>>>>>> ad00e2d (Updated customers.py and discrete_hellinger and discrete_structure with preprocessing and parallelized sem function)
     ancestral_order = pb.Dag(red.nodes(), red.arcs()).topological_sort()
 
     # Use ProcessPoolExecutor to dynamically assign tasks to available cores
@@ -52,18 +47,12 @@ def joint_sampling(red,cluster_names,n=100000):  #esta funcion realiza un sampli
     samples = pd.DataFrame(results)
     return samples
 
-<<<<<<< HEAD
-#def get_MAP(red,clusters_names,n=200000): #Esta función nos devuelve el map dado cada cluster, es decir, el representante de cada cluster. La inferencia se realiza
-def get_MAP(red,clusters_names,n=2000): #Esta función nos devuelve el map dado cada cluster, es decir, el representante de cada cluster. La inferencia se realiza
-    #mediante probabilistic logic sampling. Para ello se toma una muestra de la distribución conjunta (joint_sampling) y nos quedamos con los samples que necesitamos.
-=======
 
 #SE puede paralelizar para cada cluster
 def get_MAP(red,clusters_names,n=200000): #Esta función nos devuelve el map dado cada cluster, es decir, el representante de cada cluster. La inferencia se realiza
     """
     Parallelized version of get_MAP.
     """
->>>>>>> ad00e2d (Updated customers.py and discrete_hellinger and discrete_structure with preprocessing and parallelized sem function)
     MAP = pd.DataFrame()
     sample = joint_sampling(red, clusters_names, n)  # Obtain a sample of the joint distribution
 
@@ -301,112 +290,27 @@ def ev_probability(bn, instances, cluster_names, df_categories, n=1000):
         return evidence_probability
 
 
-def importance_1(red, point, df_categories, clusters_names):
-    """Importancia de la variable mediante la variación de la propia variable
-       point en orden ancestral.
-    """
+def importance_1(red,point,df_categories,clusters_names):  #importancia de la variable a través de variación de la propia variable
+                                                           #point en orden ancestral
 
-    # Ojo: 'cluster' debe estar fuera de variables
     variables = red.nodes()
     variables.remove('cluster')
+    prob_posterior_map = posterior_probability(red, clusters_names, df_categories, point)#calculamos P(C | MAP)
 
-    # Calcula la probabilidad posterior del MAP
-    prob_posterior_map = posterior_probability(red, clusters_names, df_categories, point)
-    print("[DEBUG] prob_posterior_map =", prob_posterior_map)
-
-    # Orden ancestral
     ancestral_order = pb.Dag(red.nodes(), red.arcs()).topological_sort()
     ancestral_order.remove('cluster')
 
-    # Diccionario de importancias
     importance = {}
-
-    for k in range(len(ancestral_order)):
+    for k in range(len(ancestral_order)): #calculamos la importancia para cada variable.
+        distances = []
         var = ancestral_order[k]
-
-        # Construimos "instances" para ev_probability(...) sin la variable actual
         instances = {}
         lista = red.nodes()
         lista.remove('cluster')
         lista.remove(var)
         for variable in lista:
-            # Toma el valor actual del MAP (point) para esa variable
-            idx_in_point = ancestral_order.index(variable)
-            instances[variable] = point[idx_in_point]
+            instances[variable] = point[ancestral_order.index(variable)]
 
-<<<<<<< HEAD
-        # Calculamos P(X_(-i)) => e_prob
-        e_prob = ev_probability(red, instances, clusters_names, df_categories)
-        print(f"[DEBUG] var={var}: e_prob={e_prob:.6f}, df_categories[var]={df_categories[var]}")
-
-        # Recorremos categorías de la variable para ver la diferencia con point[k]
-        distances = []
-        for category in df_categories[var]:
-            # Debug: mostrar la categoría que estamos analizando
-            print(f"[DEBUG] var={var}, category={category}, MAP_category={point[k]}")
-            if point[k] != category:
-                # ========== Cálculo de la Hellinger distance con esa categoría ==========
-                evidence = point.copy()
-                evidence[k] = category
-
-                # Calculamos prob posterior condicional P(C | esa evidencia)
-                lklh = []
-                for p_c in clusters_names:
-                    instance = pd.DataFrame(columns=ancestral_order)
-                    i = 0
-                    for column in instance.columns:
-                        instance[column] = pd.Series(pd.Categorical([evidence[i]], 
-                                                    categories=df_categories[column]))
-                        i += 1
-
-                    instance['cluster'] = pd.Series(pd.Categorical([p_c], 
-                                                categories=clusters_names))
-                    x = math.exp(red.logl(instance)[0])
-                    lklh.append(x)
-
-                # normalizar
-                t = sum(lklh)
-                prob_posterior = [x / t for x in lklh]
-
-                # Distancia de Hellinger respecto a la posterior del MAP
-                d = hellinger_distance(prob_posterior_map, prob_posterior)
-
-                # ===== Calculamos P(X_i, X_(-i)) =====
-                probability = 0
-                for p_c in clusters_names:
-                    data = pd.DataFrame()
-                    for inst_var, inst_val in instances.items():
-                        data[inst_var] = pd.Series(pd.Categorical([inst_val], 
-                                                categories=df_categories[inst_var]))
-                    data[var] = pd.Series(pd.Categorical([category], 
-                                         categories=df_categories[var]))
-                    data['cluster'] = pd.Series(pd.Categorical([p_c], 
-                                             categories=clusters_names))
-
-                    probability += math.exp(red.logl(data)[0])
-
-                # Añadimos el término a distances
-                product_val = d * probability
-                distances.append(product_val)
-
-                print(f"[DEBUG] var={var}, category={category}, d={d:.6f}, prob_sum={probability:.6f}, product={product_val:.6f}")
-            else:
-                print(f"[DEBUG] var={var}, category={category} == MAP_category => skipping.")
-
-        # Al terminar, revisamos si distances quedó vacío
-        print(f"[DEBUG] var={var}, final distances={distances}")
-
-        if not distances:
-            # Si no hay datos para calcular la media (caso 1 sola categoría o no se cumplió if)
-            print(f"[WARNING] var={var} => distances vacío; asignando 0 a importancia.")
-            importance[var] = 0
-        else:
-            importance[var] = mean(distances) / e_prob
-            print(f"[DEBUG] var={var}, importance={importance[var]:.6f}")
-
-    return importance
-
-=======
         e_prob = ev_probability(red, instances, clusters_names,df_categories) #Como P(X_i | X_(-i))=P(X_i,X_(-i))/P(X_(-i)) calculamos P(X_(-i))
         # Use parallel_compute_distances to compute the mean of distances
         mean_distance = parallel_compute_distances(
@@ -583,4 +487,3 @@ def parallel_compute_distances(red, point, df_categories, clusters_names, prob_p
 
     # Compute the mean of distances
     return sum(distances) / len(distances)
->>>>>>> ad00e2d (Updated customers.py and discrete_hellinger and discrete_structure with preprocessing and parallelized sem function)
