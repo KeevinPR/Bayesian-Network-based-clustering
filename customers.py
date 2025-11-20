@@ -7,10 +7,12 @@ import numpy as np
 
 
 
-dataframe=pd.read_csv(r'C:\Users\Victor Alejandre\Desktop\CIG\Implementación\customers.csv')
+dataframe=pd.read_csv(r'C:\Users\G513\PycharmProjects\cluster_intrepretability\datasets\customers.csv')
 
 #Preprocesado de los datos donde convertimos en categórica la variables continuas income y age
 dataframe=dataframe.drop('ID',axis=1)
+dataframe = dataframe.sample(n=200, random_state=42).reset_index(drop=True)
+
 def ni(x):
     if x<50000:
         return 'Low income'
@@ -65,26 +67,22 @@ red_inicial=pb.DiscreteBN(in_nodes,in_arcs)
 
 
 #Aprendizaje del modelo
-#Comenzamos importando las funciones necesarias creadas: EM, structure_logl, sem, n_param.
-from discrete_structure import EM
-from discrete_structure import n_param
-from discrete_structure import structure_logl
 from discrete_structure import sem
 
 #Necesitamos los posibles valores de cada variable para trabajar con los algoritmos implementados, estos deben ir en un diccionaro {variable: [categorias]}
+if __name__ == '__main__':
+    for var in dataframe.columns:
+        dataframe[var]=dataframe[var].astype('category')
 
-for var in dataframe.columns:
-    dataframe[var]=dataframe[var].astype('category')
-
-categories={}
-for var in dataframe.columns:
-    categories[var]=dataframe[var].cat.categories
-
-
-best=sem(red_inicial,dataframe,categories,clusters)
-
-print(best.arcs())
+    categories={}
+    for var in dataframe.columns:
+        categories[var]=dataframe[var].cat.categories
 
 
+    best=sem(red_inicial,dataframe,categories,clusters)
 
-best.save("best_network_customers_2_nosirve", include_cpd= True)
+    print(best.arcs())
+
+
+
+    best.save("best_network_customers_2_parallelized", include_cpd= True)

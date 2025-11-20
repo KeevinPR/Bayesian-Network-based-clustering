@@ -1,4 +1,4 @@
-import numpy.random
+veimport numpy.random
 import pandas as pd
 import plotly
 import pickle
