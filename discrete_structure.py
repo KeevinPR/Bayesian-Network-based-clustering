@@ -4,9 +4,13 @@ from itertools import product
 import math
 import numpy as np
 import random
-from multiprocessing import Pool
+from concurrent.futures import ThreadPoolExecutor
 import itertools
-from concurrent.futures import ProcessPoolExecutor
+
+# Helper function to emulate starmap for ThreadPoolExecutor
+def thread_starmap(executor, func, args_list):
+    futures = [executor.submit(func, *args) for args in args_list]
+    return [future.result() for future in futures]
 
 #Tiene completado de dataset
 def EM(red, dataframe, clusters_names, kmax=100):
@@ -126,9 +130,8 @@ def n_param(red, number_of_clusters,categories_df):  # dado una red, el nº de c
     df = dataframe.copy()
 
     # Parallelize the computation for each row
-    with Pool() as pool:
-        row_sums = pool.starmap(
-            compute_row_contribution,
+    with ThreadPoolExecutor() as pool:
+        row_sums = thread_starmap(pool, compute_row_contribution,
             [(row_index, df.copy(), rb_n_h, rb_h, clusters_names) for row_index in range(df.shape[0])]
         )
 
@@ -145,9 +148,8 @@ def structure_logl(M_h, M_n_h, dataframe, clusters_names): #esta función estima
     df = dataframe.copy()
 
     # Parallelize the computation for each row
-    with Pool() as pool:
-        row_sums = pool.starmap(
-            compute_row_contribution,
+    with ThreadPoolExecutor() as pool:
+        row_sums = thread_starmap(pool, compute_row_contribution,
             [(row_index, df.copy(), rb_n_h, rb_h, clusters_names) for row_index in range(df.shape[0])]
         )
 
@@ -273,11 +275,11 @@ def weighted_choice(elements, weights):
     ranges[-1] = (ranges[-1][0], total_combinations)
 
     # Generate and process chunks in parallel
-    with Pool() as pool:  # Automatically uses all available cores
+    with ThreadPoolExecutor() as pool:  # Automatically uses all available cores
         # Generate chunks of combinations
-        chunks = pool.starmap(generate_combinations_chunk, [(categor, start, end) for start, end in ranges])
+        chunks = thread_starmap(pool, generate_combinations_chunk, [(categor, start, end) for start, end in ranges])
         # Process each chunk into a DataFrame
-        dataframes = pool.starmap(process_combinations_chunk, [(chunk, df_columns) for chunk in chunks])
+        dataframes = thread_starmap(pool, process_combinations_chunk, [(chunk, df_columns) for chunk in chunks])
 
     # Concatenate all DataFrames into a single DataFrame
     return pd.concat(dataframes, ignore_index=True)'''
@@ -299,7 +301,7 @@ def parallel_generate_combinations(categor, df_columns, num_chunks):
     ranges[-1] = (ranges[-1][0], total_combinations)
 
     # Generate and process chunks in parallel
-    with ProcessPoolExecutor() as executor:
+    with ThreadPoolExecutor() as executor:
         # Generate chunks of combinations
         chunks = list(executor.map(
             generate_combinations_chunk,
@@ -348,10 +350,9 @@ def parallel_compute_logl(clusters_names, df, rb):
     """
     Parallelize the computation of log-likelihoods for all clusters.
     """
-    with Pool() as pool:
+    with ThreadPoolExecutor() as pool:
         # Distribute the computation of log-likelihoods across all clusters
-        results = pool.starmap(
-            compute_logl_for_cluster,
+        results = thread_starmap(pool, compute_logl_for_cluster,
             [(cluster, df.copy(), rb, clusters_names) for cluster in clusters_names]
         )
     return results
@@ -371,19 +372,18 @@ def compute_posterior_and_sample(row_index, logl, clusters_names):
     """
     Parallelize the computation of P(C|x) and sampling for all rows.
     """
-    with Pool() as pool:
+    with ThreadPoolExecutor() as pool:
         # Distribute the computation across all rows
-        new_c = pool.starmap(
-            compute_posterior_and_sample,
+        new_c = thread_starmap(pool, compute_posterior_and_sample,
             [(row_index, logl, clusters_names) for row_index in range(df.shape[0])]
         )
     return new_c'''
 
 def parallel_sample_clusters(df, logl, clusters_names):
     """
-    Parallelize the computation of P(C|x) and sampling for all rows using ProcessPoolExecutor.
+    Parallelize the computation of P(C|x) and sampling for all rows using ThreadPoolExecutor.
     """
-    with ProcessPoolExecutor() as executor:
+    with ThreadPoolExecutor() as executor:
         # Submit tasks for each row
         futures = [executor.submit(compute_posterior_and_sample, row_index, logl, clusters_names) for row_index in range(df.shape[0])]
 
@@ -402,8 +402,8 @@ def compute_row_contribution(row_index, df, rb_n_h, rb_h, clusters_names):
     # Compute unnormalized posterior probabilities
     unnormalized_probs = []
     for cluster in clusters_names:
-        df['cluster'] = pd.Series([cluster] * df.shape[0], dtype="category", categories=clusters_names)
-        unnormalized_probs.append(math.exp(rb_n_h.logl(df.iloc[[row_index]]).iloc[0]))
+        df['cluster'] = pd.Series(pd.Categorical([cluster] * df.shape[0], categories=clusters_names))
+        unnormalized_probs.append(math.exp(rb_n_h.logl(df.iloc[[row_index]])[0]))
 
     # Normalize posterior probabilities
     total_prob = sum(unnormalized_probs)
@@ -412,8 +412,8 @@ def compute_row_contribution(row_index, df, rb_n_h, rb_h, clusters_names):
     # Compute the sum of contributions for the row
     row_sum = 0
     for cluster, posterior_prob in zip(clusters_names, posterior_probs):
-        df['cluster'] = pd.Series([cluster] * df.shape[0], dtype="category", categories=clusters_names)
-        logl_h = rb_h.logl(df.iloc[[row_index]]).iloc[0]
+        df['cluster'] = pd.Series(pd.Categorical([cluster] * df.shape[0], categories=clusters_names))
+        logl_h = rb_h.logl(df.iloc[[row_index]])[0]
         row_sum += posterior_prob * logl_h
 
     return row_sum
