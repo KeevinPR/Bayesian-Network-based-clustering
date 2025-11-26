@@ -163,7 +163,7 @@ def n_param(clgbn,k): #Con esta función calculamos el nº de parámetros para e
     return n
 
 
-def sem(bn, dataframe, clusters_names, max_iter=2, em_kmax=500, structlog_sample=500):
+def sem(bn, dataframe, clusters_names, max_iter=2, em_kmax=50, structlog_sample=500):
     clgbn = EM(bn, dataframe, clusters_names, em_kmax)  # comenzamos estimando la red naive bayes
     best=clgbn.clone()
     i = 0  # controla cuando se llega a un punto estacionario el máximo nº de iteraciones a realizar
