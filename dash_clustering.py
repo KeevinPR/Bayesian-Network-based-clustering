@@ -204,12 +204,12 @@ app.layout = dcc.Loading(
             dcc.Input(
                 id='num-samples-input',
                 type='number',
-                value=300,
+                value=50,
                 min=10,
                 step=10,
                 style={'marginRight': '20px'}
             ),
-            html.Small("Más muestras = resultados más estables pero más lentos.",
+            html.Small("Recomendado 30-100 muestras (~9x7 / 500 filas). Más muestras = más lento.",
                        style={'display': 'block', 'marginTop': '5px', 'color': '#555'}),
             html.Br(),
             html.Label("Order Variables?"),
