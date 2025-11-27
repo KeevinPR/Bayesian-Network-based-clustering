@@ -26,6 +26,25 @@ from multiprocessing import Pool
 from operator import itemgetter
 import math
 
+# Cache global de tablas CPT para no recalcular from_CPT_to_df cada vez
+_CPD_CACHE = {}
+
+def get_cpd_df(bn, var_name):
+    """
+    Devuelve la CPT de 'var_name' como DataFrame, cacheando el resultado.
+    La clave usa id(bn) para evitar mezclar redes distintas.
+    """
+    key = (id(bn), var_name)
+    if key not in _CPD_CACHE:
+        _CPD_CACHE[key] = from_CPT_to_df(str(bn.cpd(var_name)))
+    return _CPD_CACHE[key]
+
+def get_ancestral_order_without_cluster(red):
+    order = pb.Dag(red.nodes(), red.arcs()).topological_sort()
+    if 'cluster' in order:
+        order.remove('cluster')
+    return order
+
 
 
 def joint_sampling(red, cluster_names, n=100000):
@@ -183,8 +202,11 @@ def posterior_probability(red, clusters_names, df_categories, point):
     Compute P(C | x) for a given point x.
     `point` must be in ancestral order (excluding 'cluster').
     """
-    ancestral_order = pb.Dag(red.nodes(), red.arcs()).topological_sort()
-    ancestral_order.remove("cluster")
+    """
+    Compute P(C | x) for a given point x.
+    `point` must be in ancestral order (excluding 'cluster').
+    """
+    ancestral_order = get_ancestral_order_without_cluster(red)
 
     # Construimos un DataFrame con una fila por valor de cluster
     data = pd.DataFrame([point] * len(clusters_names), columns=ancestral_order)
@@ -228,17 +250,25 @@ def ev_probability(bn, instances,cluster_names,df_categories, n=80):  #Esta func
 
     w = 0 #a esta variable se el irán sumando los pesos w a medida que se calculen
 
-    ancestral_order = pb.Dag(bn.nodes(), bn.arcs()).topological_sort()
+    ancestral_order = get_ancestral_order_without_cluster(bn)
 
     for i in range(n): #obtenemos la muestra para calcular P(e)
         sample = evidence_value.copy()
+        # Explicitly sample 'cluster' if it's missing (since we removed it from ancestral_order)
+        if 'cluster' not in sample:
+             cluster_cpt = get_cpd_df(bn, 'cluster')
+             sample['cluster'] = numpy.random.choice(
+                cluster_names,
+                1,
+                p=cluster_cpt.iloc[0].tolist()
+            )[0]
+
         for var in ancestral_order:
-            if bn.num_parents(var) == 0: #Con esto fijamos que la variable sea la variable cluster la cual es la única sin padres y sampleamos
-                sample[var] = numpy.random.choice(cluster_names, 1,
-                                                     p=from_CPT_to_df(str(bn.cpd('cluster'))).iloc[0].tolist())[0]
+            if bn.num_parents(var) == 0:
+                 continue # Already handled cluster or other roots
             else: #sampleamos de aquellas variables que no estén en la evidencia
                 if var not in evidence_value.keys():
-                    prob = from_CPT_to_df(str(bn.cpd(var)))
+                    prob = get_cpd_df(bn, var)
                     for element in bn.parents(var):
                         prob = prob.loc[prob[element] == itemgetter(element)(sample)]
                         prob = prob.drop(element, axis=1)
@@ -275,8 +305,7 @@ def importance_1(red,point,df_categories,clusters_names):  #importancia de la va
     variables.remove('cluster')
     prob_posterior_map = posterior_probability(red, clusters_names, df_categories, point)#calculamos P(C | MAP)
 
-    ancestral_order = pb.Dag(red.nodes(), red.arcs()).topological_sort()
-    ancestral_order.remove('cluster')
+    ancestral_order = get_ancestral_order_without_cluster(red)
 
     importance = {}
     for k in range(len(ancestral_order)): #calculamos la importancia para cada variable.
@@ -336,8 +365,11 @@ def compute_distance_for_category(category, point, k, red, clusters_names, df_ca
 
     # Compute P(C|X) for the updated evidence
     lklh = []
-    ancestral_order = pb.Dag(red.nodes(), red.arcs()).topological_sort()
-    ancestral_order.remove('cluster')
+    # Compute P(C|X) for the updated evidence
+    lklh = []
+    # ancestral_order is not needed here for DataFrame columns if we assume consistent order or pass it
+    # But to be safe and consistent with previous code:
+    ancestral_order = get_ancestral_order_without_cluster(red)
 
     for p_c in clusters_names:
         instance = pd.DataFrame(columns=ancestral_order)
@@ -369,8 +401,10 @@ def parallel_compute_distances(red, point, df_categories, clusters_names, prob_p
     """
     Sequential computation of distances for all categories of a variable.
     """
-    ancestral_order = pb.Dag(red.nodes(), red.arcs()).topological_sort()
-    ancestral_order.remove('cluster')
+    """
+    Sequential computation of distances for all categories of a variable.
+    """
+    ancestral_order = get_ancestral_order_without_cluster(red)
     k = ancestral_order.index(var)
     categories = df_categories[var]
     distances = []

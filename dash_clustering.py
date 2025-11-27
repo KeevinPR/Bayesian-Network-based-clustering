@@ -657,7 +657,8 @@ def run_cluster_only(n_clicks, k_clusters, df_json):
         categories[var] = df[var].cat.categories.tolist()
 
     # 5) Train/learn the BN structure
-    best_network = discrete_structure.sem(bn_initial, df, categories, cluster_names)
+    # Use max_iter=1, em_kmax=10 to speed up structure learning
+    best_network = discrete_structure.sem(bn_initial, df, categories, cluster_names, max_iter=1, em_kmax=10)
 
     # 6) Single BN figure
     single_bn_src = plot_bn_dag(best_network, "Learned BN (Cluster Only)")
