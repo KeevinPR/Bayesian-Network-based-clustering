@@ -222,7 +222,7 @@ def hellinger_distance(p, q):
 
 
 
-def ev_probability(bn, instances,cluster_names,df_categories, n=300):  #Esta función utiliza likelihood weighting para obtener P(e)
+def ev_probability(bn, instances,cluster_names,df_categories, n=80):  #Esta función utiliza likelihood weighting para obtener P(e)
     evidence = list(instances.keys())
     evidence_value = instances.copy()
 
