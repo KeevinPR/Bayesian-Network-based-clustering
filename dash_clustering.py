@@ -13,6 +13,11 @@ import pandas as pd
 import networkx as nx  # For DAG visualization
 
 import pybnesian as pb  # or import pyAgrum, depending on your BN library
+import time
+import sys
+def log_debug(msg):
+    sys.stderr.write(f"[DEBUG {time.strftime('%H:%M:%S')}] {msg}\n")
+    sys.stderr.flush()
 # === Import your code ===
 import discrete_structure
 import discrete_analysis_hellinger
@@ -199,11 +204,13 @@ app.layout = dcc.Loading(
             dcc.Input(
                 id='num-samples-input',
                 type='number',
-                value=1000,
+                value=300,
                 min=10,
                 step=10,
                 style={'marginRight': '20px'}
             ),
+            html.Small("Más muestras = resultados más estables pero más lentos.",
+                       style={'display': 'block', 'marginTop': '5px', 'color': '#555'}),
             html.Br(),
             html.Label("Order Variables?"),
             dcc.RadioItems(
@@ -407,7 +414,10 @@ def run_cluster_importance(
      3) The radar chart for MAP representatives + importance,
      4) A textual list of each (variable, map_value, importance).
     """
-    print("[DEBUG] run_cluster_importance called.")
+    with open("/tmp/dash_debug.log", "a") as f:
+        f.write(f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] === NEW RUN ===\n")
+        f.write(f"Parameters: k_clusters={k_clusters}, n_samples={n_samples}\n")
+    log_debug("run_cluster_importance called.")
     if not n_clicks:
         raise dash.exceptions.PreventUpdate
     if not df_json:
@@ -415,6 +425,8 @@ def run_cluster_importance(
     
     # 1) Prepare DataFrame
     df = pd.read_json(df_json, orient='split')
+    with open("/tmp/dash_debug.log", "a") as f:
+        f.write(f"Dataset shape: {df.shape} (rows={df.shape[0]}, cols={df.shape[1]})\n")
     for col in df.columns:
         df[col] = df[col].astype(str).astype('category')
 
@@ -441,16 +453,28 @@ def run_cluster_importance(
         categories[var] = df[var].cat.categories.tolist()
 
     # 4) Learn the BN
-    print("[DEBUG] Calling discrete_structure.sem(...)")
-    best_network = discrete_structure.sem(bn_initial, df, categories, cluster_names)
+    log_debug("Calling discrete_structure.sem(...)")
+    t0 = time.time()
+    # Use max_iter=1, em_kmax=10 to speed up structure learning
+    best_network = discrete_structure.sem(bn_initial, df, categories, cluster_names, max_iter=1, em_kmax=10)
+    elapsed = time.time() - t0
+    with open("/tmp/dash_debug.log", "a") as f:
+        f.write(f"Structure learning: {elapsed:.2f}s\n")
+    log_debug(f"Structure learning took {elapsed} seconds")
 
     # 5) Single BN figure
     print("[DEBUG] Plotting the main BN DAG.")
     dag_img_src = plot_bn_dag(best_network, "Cluster + Importance BN")
 
     # 6) Obtain MAP representatives + importance
-    print("[DEBUG] Calling get_MAP(...)")
+    # 6) Obtain MAP representatives + importance
+    log_debug(f"Calling get_MAP(...) with n={n_samples}")
+    t1 = time.time()
     map_reps = discrete_analysis_hellinger.get_MAP(best_network, cluster_names, n=n_samples)
+    elapsed = time.time() - t1
+    with open("/tmp/dash_debug.log", "a") as f:
+        f.write(f"MAP computation: {elapsed:.2f}s\n")
+    log_debug(f"MAP computation took {elapsed} seconds")
     
     # Prepare an ancestral order that excludes 'cluster' itself
     ancestral_order = list(pb.Dag(best_network.nodes(), best_network.arcs()).topological_sort())
@@ -458,6 +482,7 @@ def run_cluster_importance(
         ancestral_order.remove('cluster')
 
     # Compute importance for each cluster
+    t2 = time.time()
     importances_dict = {}
     for clus in cluster_names:
         row = map_reps.loc[clus]
@@ -473,6 +498,11 @@ def run_cluster_importance(
             best_network, point_list, categories, cluster_names
         )
         importances_dict[clus] = imp_clus
+    elapsed = time.time() - t2
+    with open("/tmp/dash_debug.log", "a") as f:
+        f.write(f"Importance computation: {elapsed:.2f}s\n")
+        f.write(f"TOTAL TIME: {time.time() - t0:.2f}s\n")
+    log_debug(f"Importance computation took {elapsed} seconds")
     
     # 7) Build the subcluster DAGs + carousel
     print("[DEBUG] Building subcluster DAGs for each cluster.")

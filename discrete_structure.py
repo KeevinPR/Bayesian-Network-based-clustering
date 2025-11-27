@@ -8,9 +8,15 @@ from concurrent.futures import ThreadPoolExecutor
 import itertools
 
 # Helper function to emulate starmap for ThreadPoolExecutor
-def thread_starmap(executor, func, args_list):
-    futures = [executor.submit(func, *args) for args in args_list]
-    return [future.result() for future in futures]
+# def thread_starmap(executor, func, args_list):
+#     futures = [executor.submit(func, *args) for args in args_list]
+#     return [future.result() for future in futures]
+
+import sys
+import time
+def log_debug(msg):
+    sys.stderr.write(f"[DEBUG {time.strftime('%H:%M:%S')}] {msg}\n")
+    sys.stderr.flush()
 
 #Tiene completado de dataset
 def EM(red, dataframe, clusters_names, kmax=100):
@@ -141,17 +147,15 @@ def n_param(red, number_of_clusters,categories_df):  # dado una red, el nº de c
 
 def structure_logl(M_h, M_n_h, dataframe, clusters_names): #esta función estima el expected loglikelihood de los datos.
     """
-    Parallelized computation of structure_logl.
+    Sequential computation of structure_logl.
     """
     rb_n_h = M_n_h.clone()
     rb_h = M_h.clone()
     df = dataframe.copy()
 
-    # Parallelize the computation for each row
-    with ThreadPoolExecutor() as pool:
-        row_sums = thread_starmap(pool, compute_row_contribution,
-            [(row_index, df.copy(), rb_n_h, rb_h, clusters_names) for row_index in range(df.shape[0])]
-        )
+    row_sums = []
+    for row_index in range(df.shape[0]):
+        row_sums.append(compute_row_contribution(row_index, df.copy(), rb_n_h, rb_h, clusters_names))
 
     # Aggregate the results
     structure_logl = sum(row_sums)
@@ -165,12 +169,13 @@ def sem(bn, dataframe, categories_df, clusters_names, max_iter=2, em_kmax=50):
     BIC = -2 * structure_logl(clgbn, clgbn, df, clusters_names) + math.log(df.shape[0]) * n_param(clgbn,len(clusters_names),categories_df)  # bic de la primera red naive
 
 
-    print(BIC)
+    log_debug(f"Initial BIC: {BIC}")
     participant_nodes = list(df.columns.copy())  # Nodos de la red
     possible_arcs = list(itertools.permutations(participant_nodes,2))  # Posibles parejas de arcos entre los nodos de la red salvo cluster
 
     # Comenzamos el algoritmo sem
     while i < max_iter:
+        log_debug(f"SEM iteration {i}, current BIC: {BIC}")
         s = 0  # controla si se ha mejorado en la iteración
         k = 0  # lo utilizamos para ir recorriendo la lista de posibles acciones (en este caso añadir arco)
         random.shuffle(possible_arcs)  # mezclamos aleatoriamente los posibles arcos que se pueden introducir
@@ -244,7 +249,7 @@ def sem(bn, dataframe, categories_df, clusters_names, max_iter=2, em_kmax=50):
                 best = clgbn.clone()
                 s = s + 1
 
-        print(BIC)
+        log_debug(f"End of inner loop, new BIC: {BIC}")
         if s == 0:  # si no se mejora comienza el contador de maxiter
             i = i + 1
         else:
@@ -289,36 +294,12 @@ def weighted_choice(elements, weights):
 
 def parallel_generate_combinations(categor, df_columns, num_chunks):
     """
-    Generate combinations in parallel by splitting the workload into a specified number of chunks.
+    Generate combinations sequentially (renamed to keep compatibility but is sequential).
     """
-    # Determine the total number of combinations
-    total_combinations = np.prod([len(cat) for cat in categor])
-
-    # Calculate the size of each chunk
-    chunk_size = total_combinations // num_chunks
-    ranges = [(i * chunk_size, (i + 1) * chunk_size) for i in range(num_chunks)]
-    # Ensure the last chunk includes any remaining combinations
-    ranges[-1] = (ranges[-1][0], total_combinations)
-
-    # Generate and process chunks in parallel
-    with ThreadPoolExecutor() as executor:
-        # Generate chunks of combinations
-        chunks = list(executor.map(
-            generate_combinations_chunk,
-            [categor] * len(ranges),
-            [start for start, _ in ranges],
-            [end for _, end in ranges]
-        ))
-
-        # Process each chunk into a DataFrame
-        dataframes = list(executor.map(
-            process_combinations_chunk,
-            chunks,
-            [df_columns] * len(chunks)
-        ))
-
-    # Concatenate all DataFrames into a single DataFrame
-    return pd.concat(dataframes, ignore_index=True)
+    # Generate all combinations directly
+    combinations = product(*categor)
+    # Convert to DataFrame
+    return pd.DataFrame(combinations, columns=df_columns)
 
 
 def generate_combinations_chunk(categor, start, end):
@@ -348,13 +329,11 @@ def compute_logl_for_cluster(cluster, df, rb, clusters_names):
 
 def parallel_compute_logl(clusters_names, df, rb):
     """
-    Parallelize the computation of log-likelihoods for all clusters.
+    Sequential computation of log-likelihoods for all clusters.
     """
-    with ThreadPoolExecutor() as pool:
-        # Distribute the computation of log-likelihoods across all clusters
-        results = thread_starmap(pool, compute_logl_for_cluster,
-            [(cluster, df.copy(), rb, clusters_names) for cluster in clusters_names]
-        )
+    results = []
+    for cluster in clusters_names:
+        results.append(compute_logl_for_cluster(cluster, df.copy(), rb, clusters_names))
     return results
 
 def compute_posterior_and_sample(row_index, logl, clusters_names):
@@ -381,15 +360,11 @@ def compute_posterior_and_sample(row_index, logl, clusters_names):
 
 def parallel_sample_clusters(df, logl, clusters_names):
     """
-    Parallelize the computation of P(C|x) and sampling for all rows using ThreadPoolExecutor.
+    Sequential computation of P(C|x) and sampling for all rows.
     """
-    with ThreadPoolExecutor() as executor:
-        # Submit tasks for each row
-        futures = [executor.submit(compute_posterior_and_sample, row_index, logl, clusters_names) for row_index in range(df.shape[0])]
-
-        # Collect results as they complete
-        new_c = [future.result() for future in futures]
-
+    new_c = []
+    for row_index in range(df.shape[0]):
+        new_c.append(compute_posterior_and_sample(row_index, logl, clusters_names))
     return new_c
 
 
