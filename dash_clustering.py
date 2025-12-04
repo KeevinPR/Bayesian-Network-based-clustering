@@ -428,7 +428,35 @@ app.layout = html.Div([
             ], style={'textAlign': 'center'}),
         ]),
 
-        # (4) Run Button
+        # (5) Run Button for Advanced Mode
+        html.Div([
+            html.Div([
+                dbc.Button(
+                    [
+                        html.I(className="fas fa-play-circle me-2"),
+                        "Run Clustering"
+                    ],
+                    id='run-clustering-importance-button',
+                    n_clicks=0,
+                    color="info",
+                    className="btn-lg",
+                    style={
+                        'fontSize': '1.1rem',
+                        'padding': '0.75rem 2rem',
+                        'borderRadius': '8px',
+                        'boxShadow': '0 2px 4px rgba(0,0,0,0.1)',
+                        'transition': 'all 0.3s ease',
+                        'backgroundColor': '#00A2E1',
+                        'border': 'none',
+                        'margin': '1rem 0',
+                        'color': 'white',
+                        'fontWeight': '500'
+                    }
+                )
+            ], style={'textAlign': 'center'}),
+        ], style={'textAlign': 'center', 'display': 'none'}, id='run-clustering-importance-container'),
+
+        # (4) Run Button (shown for basic mode)
         html.Div([
             html.Div([
                 dbc.Button(
@@ -453,33 +481,8 @@ app.layout = html.Div([
                         'fontWeight': '500'
                     }
                 )
-            ], style={'textAlign': 'center'}, id='run-button-basic'),
-            html.Div([
-                dbc.Button(
-                    [
-                        html.I(className="fas fa-play-circle me-2"),
-                        "Run Clustering + Importance"
-                    ],
-                    id='run-clustering-importance-button',
-                    n_clicks=0,
-                    color="info",
-                    className="btn-lg",
-                    style={
-                        'fontSize': '1.1rem',
-                        'padding': '0.75rem 2rem',
-                        'borderRadius': '8px',
-                        'boxShadow': '0 2px 4px rgba(0,0,0,0.1)',
-                        'transition': 'all 0.3s ease',
-                        'backgroundColor': '#00A2E1',
-                        'border': 'none',
-                        'margin': '1rem 0',
-                        'color': 'white',
-                        'fontWeight': '500',
-                        'display': 'none'
-                    }
-                )
-            ], style={'textAlign': 'center'}, id='run-button-advanced'),
-        ], style={'textAlign': 'center'}),
+            ], style={'textAlign': 'center'}),
+        ], style={'textAlign': 'center'}, id='run-clustering-container'),
 
         html.Br(),
         html.Div(id='output-area'),
@@ -673,29 +676,26 @@ def handle_mode_selection(cluster_only_clicks, cluster_importance_clicks, curren
     # Fallback
     raise dash.exceptions.PreventUpdate
 
-# Show/hide param sections and buttons based on mode
+# Show/hide param sections and run button based on mode
 @app.callback(
     Output('cluster-only-params', 'style'),
     Output('cluster-importance-params', 'style'),
-    Output('run-button-basic', 'style'),
-    Output('run-button-advanced', 'style'),
+    Output('run-clustering-container', 'style'),
     Input('action-radio', 'data')
 )
 def toggle_param_sections(mode):
-    """Show/hide parameter sections based on selected mode"""
+    """Show/hide parameter sections and update run button based on selected mode"""
     if mode == 'cluster_only':
         return (
             {'display': 'block'},
             {'display': 'none'},
-            {'textAlign': 'center'},
-            {'textAlign': 'center', 'display': 'none'}
+            {'textAlign': 'center'}
         )
     else:  # cluster_importance
         return (
             {'display': 'none'},
             {'display': 'block'},
-            {'textAlign': 'center', 'display': 'none'},
-            {'textAlign': 'center'}
+            {'textAlign': 'center', 'display': 'none'}
         )
 
 
@@ -807,7 +807,7 @@ def show_manual_order(order_choice, df_json):
 
 
 @app.callback(
-    Output('run-clustering-importance-button', 'style'),
+    Output('run-clustering-importance-container', 'style'),
     Input('continue-importance-button', 'n_clicks'),
     State('variable-order-radio', 'value'),
     State({'type': 'var-order-dropdown', 'index': ALL}, 'value')
@@ -816,28 +816,16 @@ def show_final_run_button(n_clicks, order_choice, all_values):
     print("[DEBUG] show_final_run_button called.")
     if n_clicks is None or n_clicks == 0:
         print("[DEBUG] No clicks on continue -> hide the button.")
-        return {'display': 'none'}
+        return {'textAlign': 'center', 'display': 'none'}
 
     if order_choice == 'manual':
         # Check if any position is None or duplicates
         if None in all_values or len(set(all_values)) != len(all_values):
             print("[DEBUG] Manual order incomplete or duplicates -> hide the button.")
-            return {'display': 'none'}
+            return {'textAlign': 'center', 'display': 'none'}
 
     print("[DEBUG] Continue clicked, showing the final run button.")
-    return {
-        'fontSize': '1.1rem',
-        'padding': '0.75rem 2rem',
-        'borderRadius': '8px',
-        'boxShadow': '0 2px 4px rgba(0,0,0,0.1)',
-        'transition': 'all 0.3s ease',
-        'backgroundColor': '#00A2E1',
-        'border': 'none',
-        'margin': '1rem 0',
-        'color': 'white',
-        'fontWeight': '500',
-        'display': 'inline-block'
-    }
+    return {'textAlign': 'center'}
 
 
 @app.callback(
