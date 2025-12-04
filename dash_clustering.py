@@ -1038,14 +1038,14 @@ def run_cluster_importance(
     # 10) Build final layout with card styling
     layout_div = html.Div([
         html.Div(className="card-big", children=[
-            html.H4("Clustering + Importance Analysis Results", style={'textAlign': 'center', 'color': 'white'}),
+            html.H4("Clustering + Importance Analysis Results", style={'textAlign': 'center'}),
             html.P(f"Number of clusters: {k_clusters} | Samples for inference: {n_samples}", 
-                   style={'textAlign': 'center', 'color': 'rgba(255, 255, 255, 0.9)', 'marginBottom': '20px'}),
+                   style={'textAlign': 'center', 'marginBottom': '20px'}),
         ]),
 
         # Single BN figure
         html.Div(className="card", children=[
-            html.H5("Bayesian Network Structure", style={'textAlign': 'center', 'color': 'white', 'marginBottom': '20px'}),
+            html.H5("Bayesian Network Structure", style={'textAlign': 'center', 'marginBottom': '20px'}),
             html.Img(
                 src=dag_img_src,
                 className="zoomable",
@@ -1055,13 +1055,13 @@ def run_cluster_importance(
 
         # Carousel
         html.Div(className="card", children=[
-            html.H5("Individual Cluster Networks", style={'textAlign': 'center', 'color': 'white', 'marginBottom': '20px'}),
+            html.H5("Individual Cluster Networks", style={'textAlign': 'center', 'marginBottom': '20px'}),
             carousel,
         ]),
 
         # Radar chart
         html.Div(className="card", children=[
-            html.H5("MAP Representatives + Importance", style={'textAlign': 'center', 'color': 'white', 'marginBottom': '20px'}),
+            html.H5("MAP Representatives + Importance", style={'textAlign': 'center', 'marginBottom': '20px'}),
             html.Img(
                 src=radar_img_src,
                 className="zoomable",
@@ -1071,7 +1071,7 @@ def run_cluster_importance(
 
         # MAP + Importance details
         html.Div(className="card", children=[
-            html.H5("Cluster Details", style={'textAlign': 'center', 'color': 'white', 'marginBottom': '20px'}),
+            html.H5("Cluster Details", style={'textAlign': 'center', 'marginBottom': '20px'}),
             map_importances_container
         ])
     ])
@@ -1156,14 +1156,14 @@ def run_cluster_only(n_clicks, k_clusters, df_json):
     # 10) Return layout with card styling
     return html.Div([
         html.Div(className="card-big", children=[
-            html.H4("Clustering Results", style={'textAlign': 'center', 'color': 'white'}),
+            html.H4("Clustering Results", style={'textAlign': 'center'}),
             html.P(f"Number of clusters: {k_clusters}", 
-                   style={'textAlign': 'center', 'color': 'rgba(255, 255, 255, 0.9)', 'marginBottom': '20px'}),
+                   style={'textAlign': 'center', 'marginBottom': '20px'}),
         ]),
 
         # Single BN figure
         html.Div(className="card", children=[
-            html.H5("Bayesian Network Structure", style={'textAlign': 'center', 'color': 'white', 'marginBottom': '20px'}),
+            html.H5("Bayesian Network Structure", style={'textAlign': 'center', 'marginBottom': '20px'}),
             html.Img(
                 src=single_bn_src,
                 className="zoomable",
@@ -1173,7 +1173,7 @@ def run_cluster_only(n_clicks, k_clusters, df_json):
 
         # Carousel
         html.Div(className="card", children=[
-            html.H5("Individual Cluster Networks", style={'textAlign': 'center', 'color': 'white', 'marginBottom': '20px'}),
+            html.H5("Individual Cluster Networks", style={'textAlign': 'center', 'marginBottom': '20px'}),
             carousel,
         ]),
     ])
