@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import networkx as nx  # For DAG visualization
+import logging
 
 import pybnesian as pb  # or import pyAgrum, depending on your BN library
 import time
@@ -24,6 +25,10 @@ import discrete_analysis_hellinger
 import discrete_representation
 import pybnesianCPT_to_df
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 app = dash.Dash(
     __name__,
@@ -31,11 +36,56 @@ app = dash.Dash(
     #Optional
     requests_pathname_prefix='/Model/LearningFromData/ClusteringDash/',
     
-    external_stylesheets=[dbc.themes.BOOTSTRAP],
+    external_stylesheets=[
+        dbc.themes.BOOTSTRAP,
+        'https://bayes-interpret.com/Model/LearningFromData/ClusteringDash/assets/liquid-glass.css'  # Apple Liquid Glass CSS
+    ],
     suppress_callback_exceptions=True
 )
+app.title = "Clustering Dash App"
 
 server = app.server
+
+# Safari Compatibility CSS Fix for Liquid Glass Effects
+SAFARI_FIX_CSS = """
+<style>
+/* === SAFARI LIQUID GLASS COMPATIBILITY FIXES === */
+@media not all and (min-resolution:.001dpcm) {
+    @supports (-webkit-appearance:none) {
+        .card {
+            background: transparent !important;
+        }
+        .card::before {
+            background: rgba(255, 255, 255, 0.12) !important;
+            -webkit-backdrop-filter: blur(15px) saturate(180%) !important;
+            backdrop-filter: blur(15px) saturate(180%) !important;
+        }
+        .btn {
+            background: transparent !important;
+            -webkit-backdrop-filter: blur(15px) !important;
+            backdrop-filter: blur(15px) !important;
+        }
+        .btn::before {
+            background: rgba(255, 255, 255, 0.12) !important;
+        }
+        .form-control {
+            background: rgba(255, 255, 255, 0.15) !important;
+            -webkit-backdrop-filter: blur(10px) !important;
+            backdrop-filter: blur(10px) !important;
+        }
+    }
+}
+@supports not (backdrop-filter: blur(1px)) {
+    .card {
+        background: rgba(255, 255, 255, 0.85) !important;
+        border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    }
+    .btn {
+        background: rgba(255, 255, 255, 0.2) !important;
+    }
+}
+</style>
+"""
 
 ############################################################
 # HELPER: Make a DAG figure from a learned BN using networkx
@@ -132,136 +182,522 @@ def plot_map_with_importance(maps_df, importances, df_categories):
 
 
 # ====================== LAYOUT ======================
-app.layout = dcc.Loading(
-    id="global-spinner",
-    overlay_style={"visibility":"visible", "filter":"blur(1px)"},
-    type="circle",
-    fullscreen=False,
-    children=html.Div([
-        html.H1("Bayesian Network Clustering", style={'textAlign': 'center'}),
+print("🎨 Creating layout...")
+app.layout = html.Div([
+    # Safari Compatibility Fix
+    html.Div([
+        dcc.Markdown(SAFARI_FIX_CSS, dangerously_allow_html=True)
+    ], style={'display': 'none'}),
+    
+    dcc.Store(id='stored-data'),
+    dcc.Store(id='stored-dataframe'),
+    
+    dcc.Loading(
+        id="global-spinner",
+        type="default",
+        fullscreen=False,
+        color="#00A2E1",
+        style={
+            "position": "fixed",
+            "top": "50%",
+            "left": "50%",
+            "transform": "translate(-50%, -50%)",
+            "zIndex": "999999"
+        },
+        children=html.Div([
+            html.H1("Bayesian Network Clustering", style={'textAlign': 'center'}),
 
-        # Upload section
-        html.Div([
-            html.H3("Upload Discrete Dataset (CSV)"),
-            dcc.Upload(
-                id='upload-data',
-                children=html.Button('Upload File (CSV)'),
-                multiple=False
+            html.Div(
+                className="link-bar",
+                style={"textAlign": "center", "marginBottom": "20px"},
+                children=[
+                    html.A(
+                        children=[
+                            html.Img(
+                                src="https://cig.fi.upm.es/wp-content/uploads/github.png",
+                                style={"height": "24px", "marginRight": "8px"}
+                            ),
+                            "Clustering GitHub"
+                        ],
+                        href="https://github.com/CIG-UPM/BayesianNetworks",
+                        target="_blank",
+                        className="btn btn-outline-info me-2"
+                    ),
+                    html.A(
+                        children=[
+                            html.Img(
+                                src="https://cig.fi.upm.es/wp-content/uploads/2023/11/cropped-logo_CIG.png",
+                                style={"height": "24px", "marginRight": "8px"}
+                            ),
+                            "Documentation"
+                        ],
+                        href="https://cig.fi.upm.es/",
+                        target="_blank",
+                        className="btn btn-outline-primary me-2"
+                    ),
+                ]
             ),
-            # Checklist to use a default dataset
-            dcc.Checklist(
-                id='use-default-dataset',
-                options=[{'label': 'Use default dataset', 'value': 'default'}],
-                value=[],
-                style={'textAlign': 'center', 'marginTop': '10px'}
-            ),
-            html.Div(id='upload-data-filename', style={'marginTop': '5px', 'color': 'green'})
-        ], style={'textAlign': 'center'}),
 
-        html.Hr(),
+            html.Div([
+                html.P(
+                    "Discover hidden patterns in your data using Bayesian Network Clustering with importance analysis.",
+                    style={"textAlign": "center", "maxWidth": "800px", "margin": "0 auto"}
+                )
+            ], style={"marginBottom": "20px"}),
 
-        # Choose Action
+            # (1) Dataset Upload
+            html.Div(className="card", children=[
+                html.Div([
+                    html.H3("1. Load Dataset (CSV)", style={'display': 'inline-block', 'marginRight': '10px', 'textAlign': 'center'}),
+                    dbc.Button(
+                        html.I(className="fa fa-question-circle"),
+                        id="help-button-dataset",
+                        color="link",
+                        style={"display": "inline-block", "verticalAlign": "middle", "padding": "0", "marginLeft": "5px"}
+                    ),
+                ], style={"textAlign": "center", "position": "relative"}),
+                html.Div([
+                    html.Div([
+                        html.Img(
+                            src="https://img.icons8.com/ios-glyphs/40/cloud--v1.png",
+                            className="upload-icon"
+                        ),
+                        html.Div("Drag and drop or select a CSV file", className="upload-text")
+                    ]),
+                    dcc.Upload(
+                        id='upload-data',
+                        children=html.Div([], style={'display': 'none'}),
+                        className="upload-dropzone",
+                        multiple=False
+                    ),
+                ], className="upload-card"),
+
+                html.Div([
+                    dcc.Checklist(
+                        id='use-default-dataset',
+                        options=[{'label': 'Use default dataset (customers)', 'value': 'default'}],
+                        value=[],
+                        style={'display': 'inline-block', 'marginTop': '10px'}
+                    ),
+                    dbc.Button(
+                        html.I(className="fa fa-question-circle"),
+                        id="help-button-default-dataset",
+                        color="link",
+                        style={"display": "inline-block", "marginLeft": "8px"}
+                    ),
+                html.Div(id='upload-data-filename', style={'textAlign': 'center', 'color': 'green'}),
+                ], style={'textAlign': 'center'}),
+            ]),
+
+            # (2) Mode Selection
+            html.Div(className="card", children=[
+                html.Div([
+                    html.H3("2. Select Analysis Mode", style={'display': 'inline-block', 'marginRight': '10px', 'textAlign': 'center'}),
+                    dbc.Button(
+                        html.I(className="fa fa-question-circle"),
+                        id="help-button-action",
+                        color="link",
+                        style={"display": "inline-block", "verticalAlign": "middle", "padding": "0", "marginLeft": "5px"}
+                    ),
+                ], style={"textAlign": "center", "position": "relative"}),
+                
+                # Mode selection with button toggle
+                html.Div([
+                    dbc.ButtonGroup([
+                        dbc.Button(
+                            [
+                                html.Div([
+                                    html.Strong('Cluster Network Only'),
+                                    html.Br(),
+                                    html.Small('Basic clustering structure', style={'fontSize': '11px'})
+                                ])
+                            ],
+                            id='cluster-only-mode-button',
+                            color='primary',
+                            outline=False,
+                            style={
+                                'padding': '12px 20px',
+                                'borderRadius': '8px 0px 0px 8px',
+                                'fontWeight': '500',
+                                'minWidth': '200px',
+                                'height': 'auto',
+                                'transition': 'all 0.2s ease'
+                            }
+                        ),
+                        dbc.Button(
+                            [
+                                html.Div([
+                                    html.Strong('Clustering + Importance'),
+                                    html.Br(),
+                                    html.Small('Full analysis with importance', style={'fontSize': '11px'})
+                                ])
+                            ],
+                            id='cluster-importance-mode-button',
+                            color='outline-primary',
+                            outline=True,
+                            style={
+                                'padding': '12px 20px',
+                                'borderRadius': '0px 8px 8px 0px',
+                                'fontWeight': '400',
+                                'minWidth': '200px',
+                                'height': 'auto',
+                                'transition': 'all 0.2s ease'
+                            }
+                        )
+                    ], style={'width': '100%', 'justifyContent': 'center'})
+                ], style={'textAlign': 'center', 'padding': '15px'}),
+                
+                # Hidden store for mode
+                dcc.Store(id='action-radio', data='cluster_only')
+            ]),
+
+        # (3) Parameters - Cluster Only
+        html.Div(className="card", id='cluster-only-params', style={'display': 'block'}, children=[
+            html.Div([
+                html.H3("3. Clustering Parameters", style={'display': 'inline-block', 'marginRight': '10px', 'textAlign': 'center'}),
+                dbc.Button(
+                    html.I(className="fa fa-question-circle"),
+                    id="help-button-basic-params",
+                    color="link",
+                    style={"display": "inline-block", "verticalAlign": "middle", "padding": "0", "marginLeft": "5px"}
+                ),
+            ], style={"textAlign": "center", "position": "relative"}),
+            html.Div([
+                html.Label("Number of Clusters:", style={'marginRight': '10px'}),
+                dcc.Input(
+                    id='num-clusters-input',
+                    type='number',
+                    value=2,
+                    min=2,
+                    step=1
+                ),
+            ], style={'textAlign': 'center', 'marginBottom': '15px'}),
+        ]),
+
+        # (3) Parameters - Cluster + Importance
+        html.Div(className="card", id='cluster-importance-params', style={'display': 'none'}, children=[
+            html.Div([
+                html.H3("3. Clustering Parameters", style={'display': 'inline-block', 'marginRight': '10px', 'textAlign': 'center'}),
+                dbc.Button(
+                    html.I(className="fa fa-question-circle"),
+                    id="help-button-advanced-params",
+                    color="link",
+                    style={"display": "inline-block", "verticalAlign": "middle", "padding": "0", "marginLeft": "5px"}
+                ),
+            ], style={"textAlign": "center", "position": "relative"}),
+            html.Div([
+                html.Label("Number of Clusters:", style={'marginRight': '10px'}),
+                dcc.Input(
+                    id='num-clusters-importance-input',
+                    type='number',
+                    value=2,
+                    min=2,
+                    step=1,
+                    style={'marginRight': '20px'}
+                ),
+                html.Label("Sample for Inference:", style={'marginRight': '10px'}),
+                dcc.Input(
+                    id='num-samples-input',
+                    type='number',
+                    value=50,
+                    min=10,
+                    step=10
+                ),
+            ], style={'textAlign': 'center', 'marginBottom': '10px'}),
+            html.Small("Recommended 30-100 samples. More samples = slower computation.",
+                       style={'display': 'block', 'textAlign': 'center', 'color': '#6c757d', 'marginBottom': '15px'}),
+            
+            html.Div([
+                html.Label("Variable Ordering:"),
+                dcc.RadioItems(
+                    id='variable-order-radio',
+                    options=[
+                        {'label': ' Random Order', 'value': 'random'},
+                        {'label': ' Manual Order', 'value': 'manual'},
+                        {'label': ' Skip', 'value': 'skip'}
+                    ],
+                    value='skip',
+                    style={'marginTop': '10px'}
+                ),
+            ], style={'textAlign': 'center', 'marginBottom': '15px'}),
+            
+            html.Div(id='manual-order-container', style={'display': 'none'}),
+            html.Div([
+                dbc.Button("Continue", id='continue-importance-button', n_clicks=0, 
+                          color="outline-primary", style={'marginTop': '10px'}),
+            ], style={'textAlign': 'center'}),
+        ]),
+
+        # (4) Run Button
         html.Div([
-            html.H3("Choose Action"),
-            dcc.RadioItems(
-                id='action-radio',
-                options=[
-                    {'label': 'Cluster Network Only', 'value': 'cluster_only'},
-                    {'label': 'Cluster Network + Importance Analysis', 'value': 'cluster_importance'}
-                ],
-                value='cluster_only',
-                style={'textAlign': 'center'}
-            )
+            html.Div([
+                dbc.Button(
+                    [
+                        html.I(className="fas fa-play-circle me-2"),
+                        "Run Clustering"
+                    ],
+                    id='run-clustering-button',
+                    n_clicks=0,
+                    color="info",
+                    className="btn-lg",
+                    style={
+                        'fontSize': '1.1rem',
+                        'padding': '0.75rem 2rem',
+                        'borderRadius': '8px',
+                        'boxShadow': '0 2px 4px rgba(0,0,0,0.1)',
+                        'transition': 'all 0.3s ease',
+                        'backgroundColor': '#00A2E1',
+                        'border': 'none',
+                        'margin': '1rem 0',
+                        'color': 'white',
+                        'fontWeight': '500'
+                    }
+                )
+            ], style={'textAlign': 'center'}, id='run-button-basic'),
+            html.Div([
+                dbc.Button(
+                    [
+                        html.I(className="fas fa-play-circle me-2"),
+                        "Run Clustering + Importance"
+                    ],
+                    id='run-clustering-importance-button',
+                    n_clicks=0,
+                    color="info",
+                    className="btn-lg",
+                    style={
+                        'fontSize': '1.1rem',
+                        'padding': '0.75rem 2rem',
+                        'borderRadius': '8px',
+                        'boxShadow': '0 2px 4px rgba(0,0,0,0.1)',
+                        'transition': 'all 0.3s ease',
+                        'backgroundColor': '#00A2E1',
+                        'border': 'none',
+                        'margin': '1rem 0',
+                        'color': 'white',
+                        'fontWeight': '500',
+                        'display': 'none'
+                    }
+                )
+            ], style={'textAlign': 'center'}, id='run-button-advanced'),
         ], style={'textAlign': 'center'}),
 
         html.Br(),
-
-        # cluster_only params
-        html.Div([
-            html.Label("Number of Clusters:"),
-            dcc.Input(
-                id='num-clusters-input',
-                type='number',
-                value=2,
-                min=2,
-                step=1
-            ),
-            html.Button("Run Clustering", id='run-clustering-button', n_clicks=0)
-        ], id='cluster-only-params', style={'textAlign': 'center', 'display': 'block'}),
-
-        # cluster_importance params
-        html.Div([
-            html.Label("Number of Clusters:"),
-            dcc.Input(
-                id='num-clusters-importance-input',
-                type='number',
-                value=2,
-                min=2,
-                step=1,
-                style={'marginRight': '20px'}
-            ),
-            html.Label("Sample for Inference:"),
-            dcc.Input(
-                id='num-samples-input',
-                type='number',
-                value=50,
-                min=10,
-                step=10,
-                style={'marginRight': '20px'}
-            ),
-            html.Small("Recomendado 30-100 muestras (~9x7 / 500 filas). Más muestras = más lento.",
-                       style={'display': 'block', 'marginTop': '5px', 'color': '#555'}),
-            html.Br(),
-            html.Label("Order Variables?"),
-            dcc.RadioItems(
-                id='variable-order-radio',
-                options=[
-                    {'label': 'Random Category Order', 'value': 'random'},
-                    {'label': 'Manually Select Variable Order', 'value': 'manual'},
-                    {'label': 'Skip Order Selection', 'value': 'skip'}
+        html.Div(id='output-area'),
+        ])
+    ),
+    
+    # Popovers
+    dbc.Popover(
+        [
+            dbc.PopoverHeader(
+                [
+                    "Dataset Requirements",
+                    html.I(className="fa fa-check-circle ms-2", style={"color": "#198754"})
                 ],
-                value='skip',
-                style={'marginTop': '10px'}
+                style={"backgroundColor": "#f8f9fa", "fontWeight": "bold"}
             ),
-            html.Br(),
-            html.Div(id='manual-order-container', style={'display': 'none'}),
-            html.Button("Continue", id='continue-importance-button', n_clicks=0, style={'marginTop': '10px'}),
-            html.Br(),
-            html.Button(
-                "Run Clustering + Importance",
-                id='run-clustering-importance-button',
-                n_clicks=0,
-                style={'display': 'none', 'marginTop': '10px'}
-            )
-        ], id='cluster-importance-params', style={'textAlign': 'center', 'display': 'none'}),
+            dbc.PopoverBody(
+                [
+                    html.Ul([
+                        html.Li([html.Strong("Format: "), "CSV file with discrete categorical variables"]),
+                        html.Li([html.Strong("Structure: "), "Each column represents a variable"]),
+                        html.Li([html.Strong("Values: "), "All values must be categorical"]),
+                        html.Li([html.Strong("Default: "), "You can use the default customers dataset"]),
+                    ]),
+                ],
+                style={"backgroundColor": "#ffffff", "borderRadius": "0 0 0.25rem 0.25rem", "maxWidth": "300px"}
+            ),
+        ],
+        id="help-popover-dataset",
+        target="help-button-dataset",
+        placement="right",
+        is_open=False,
+        trigger="hover",
+    ),
 
-        html.Hr(),
+    dbc.Popover(
+        [
+            dbc.PopoverHeader("Help", style={"backgroundColor": "#f8f9fa", "fontWeight": "bold"}),
+            dbc.PopoverBody([
+                html.P([
+                    "For details about the default dataset, check out: ",
+                    html.A("customersSmall.csv", href="https://github.com/CIG-UPM/BayesianNetworks", target="_blank"),
+                ]),
+                html.P("Feel free to upload your own dataset at any time.")
+            ]),
+        ],
+        id="help-popover-default-dataset",
+        target="help-button-default-dataset",
+        placement="right",
+        is_open=False,
+        trigger="hover"
+    ),
 
-        # Output area
-        html.Div(id='output-area', style={'textAlign': 'center'}),
+    dbc.Popover(
+        [
+            dbc.PopoverHeader("Analysis Mode", style={"backgroundColor": "#f8f9fa", "fontWeight": "bold"}),
+            dbc.PopoverBody([
+                html.P("Choose between basic clustering or full analysis with importance scores."),
+                html.P("Clustering + Importance provides deeper insights but takes longer to compute."),
+            ]),
+        ],
+        id="help-popover-action",
+        target="help-button-action",
+        placement="right",
+        is_open=False,
+        trigger="hover",
+    ),
 
-        # dcc.Stores
-        dcc.Store(id='stored-data'),
-        dcc.Store(id='stored-dataframe')
-    ])
-)
+    dbc.Popover(
+        [
+            dbc.PopoverHeader("Parameters", style={"backgroundColor": "#f8f9fa", "fontWeight": "bold"}),
+            dbc.PopoverBody([
+                html.P("Number of Clusters: How many groups to identify in your data."),
+                html.P("Choose based on your domain knowledge."),
+            ]),
+        ],
+        id="help-popover-basic-params",
+        target="help-button-basic-params",
+        placement="right",
+        is_open=False,
+        trigger="hover",
+    ),
+
+    dbc.Popover(
+        [
+            dbc.PopoverHeader("Advanced Parameters", style={"backgroundColor": "#f8f9fa", "fontWeight": "bold"}),
+            dbc.PopoverBody([
+                html.P("Samples for Inference: More samples = better accuracy but slower."),
+                html.P("Variable Ordering: Control the order of variables in analysis."),
+                html.P("Recommended: 30-100 samples."),
+            ]),
+        ],
+        id="help-popover-advanced-params",
+        target="help-button-advanced-params",
+        placement="right",
+        is_open=False,
+        trigger="hover",
+    ),
+])
+print("✅ Layout complete!")
 
 
 # ====================== CALLBACKS ======================
 
+# Handle mode button clicks and styling
 @app.callback(
-    [Output('cluster-only-params', 'style'),
-     Output('cluster-importance-params', 'style')],
-    Input('action-radio', 'value')
+    Output('cluster-only-mode-button', 'color'),
+    Output('cluster-only-mode-button', 'outline'),
+    Output('cluster-only-mode-button', 'style'),
+    Output('cluster-importance-mode-button', 'color'),
+    Output('cluster-importance-mode-button', 'outline'),
+    Output('cluster-importance-mode-button', 'style'),
+    Output('action-radio', 'data'),
+    Input('cluster-only-mode-button', 'n_clicks'),
+    Input('cluster-importance-mode-button', 'n_clicks'),
+    State('action-radio', 'data')
 )
-def toggle_param_sections(action_value):
-    print(f"[DEBUG] toggle_param_sections called with action_value={action_value}")
-    if action_value == 'cluster_only':
-        return ({'textAlign': 'center', 'display': 'block'},
-                {'textAlign': 'center', 'display': 'none'})
-    else:
-        return ({'textAlign': 'center', 'display': 'none'},
-                {'textAlign': 'center', 'display': 'block'})
+def handle_mode_selection(cluster_only_clicks, cluster_importance_clicks, current_mode):
+    """Handle mode button selection and update styles"""
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        # Default state - Cluster Only selected
+        return (
+            'primary', False, {
+                'padding': '12px 20px',
+                'borderRadius': '8px 0px 0px 8px',
+                'fontWeight': '600',
+                'minWidth': '200px',
+                'height': 'auto',
+                'transition': 'all 0.2s ease',
+                'borderWidth': '2px'
+            },
+            'outline-primary', True, {
+                'padding': '12px 20px',
+                'borderRadius': '0px 8px 8px 0px',
+                'fontWeight': '400',
+                'minWidth': '200px',
+                'height': 'auto',
+                'transition': 'all 0.2s ease'
+            },
+            'cluster_only'
+        )
+    
+    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    
+    if button_id == 'cluster-only-mode-button':
+        # Cluster Only selected
+        return (
+            'primary', False, {
+                'padding': '12px 20px',
+                'borderRadius': '8px 0px 0px 8px',
+                'fontWeight': '600',
+                'minWidth': '200px',
+                'height': 'auto',
+                'transition': 'all 0.2s ease',
+                'borderWidth': '2px'
+            },
+            'outline-primary', True, {
+                'padding': '12px 20px',
+                'borderRadius': '0px 8px 8px 0px',
+                'fontWeight': '400',
+                'minWidth': '200px',
+                'height': 'auto',
+                'transition': 'all 0.2s ease'
+            },
+            'cluster_only'
+        )
+    elif button_id == 'cluster-importance-mode-button':
+        # Cluster + Importance selected
+        return (
+            'outline-primary', True, {
+                'padding': '12px 20px',
+                'borderRadius': '8px 0px 0px 8px',
+                'fontWeight': '400',
+                'minWidth': '200px',
+                'height': 'auto',
+                'transition': 'all 0.2s ease'
+            },
+            'primary', False, {
+                'padding': '12px 20px',
+                'borderRadius': '0px 8px 8px 0px',
+                'fontWeight': '600',
+                'minWidth': '200px',
+                'height': 'auto',
+                'transition': 'all 0.2s ease',
+                'borderWidth': '2px'
+            },
+            'cluster_importance'
+        )
+    
+    # Fallback
+    raise dash.exceptions.PreventUpdate
+
+# Show/hide param sections and buttons based on mode
+@app.callback(
+    Output('cluster-only-params', 'style'),
+    Output('cluster-importance-params', 'style'),
+    Output('run-button-basic', 'style'),
+    Output('run-button-advanced', 'style'),
+    Input('action-radio', 'data')
+)
+def toggle_param_sections(mode):
+    """Show/hide parameter sections based on selected mode"""
+    if mode == 'cluster_only':
+        return (
+            {'display': 'block'},
+            {'display': 'none'},
+            {'textAlign': 'center'},
+            {'textAlign': 'center', 'display': 'none'}
+        )
+    else:  # cluster_importance
+        return (
+            {'display': 'none'},
+            {'display': 'block'},
+            {'textAlign': 'center', 'display': 'none'},
+            {'textAlign': 'center'}
+        )
+
 
 
 # Handle upload or default dataset
@@ -389,7 +825,19 @@ def show_final_run_button(n_clicks, order_choice, all_values):
             return {'display': 'none'}
 
     print("[DEBUG] Continue clicked, showing the final run button.")
-    return {'display': 'inline-block'}
+    return {
+        'fontSize': '1.1rem',
+        'padding': '0.75rem 2rem',
+        'borderRadius': '8px',
+        'boxShadow': '0 2px 4px rgba(0,0,0,0.1)',
+        'transition': 'all 0.3s ease',
+        'backgroundColor': '#00A2E1',
+        'border': 'none',
+        'margin': '1rem 0',
+        'color': 'white',
+        'fontWeight': '500',
+        'display': 'inline-block'
+    }
 
 
 @app.callback(
@@ -553,23 +1001,36 @@ def run_cluster_importance(
             imp_val = importances_dict[clus].get(var, 0.0)
             line_str = f"({var}, {chosen_val}) importance {imp_val:.4f}"
             lines.append(
-                html.Div(line_str, style={'fontSize': '12px', 'marginBottom': '3px'})
+                html.Div(line_str, style={
+                    'fontSize': '13px',
+                    'marginBottom': '6px',
+                    'color': 'rgba(255, 255, 255, 0.9)',
+                    'padding': '4px 8px',
+                    'background': 'rgba(255, 255, 255, 0.05)',
+                    'borderRadius': '6px'
+                })
             )
 
-        # Wrap them in one Div for this cluster, with inline-block to place columns side by side:
+        # Wrap them in one Div for this cluster, with glass styling:
         cluster_div = html.Div(
             children=[
-                html.H5(f"cluster {clus}", style={'fontSize': '14px', 'marginBottom': '8px'}),
+                html.H5(f"Cluster {clus}", style={'fontSize': '16px', 'marginBottom': '12px', 'fontWeight': '600', 'color': 'white', 'textAlign': 'center'}),
                 *lines
             ],
             style={
                 'display': 'inline-block',
                 'verticalAlign': 'top',
-                'width': '250px',    # Adjust column width as needed
-                'margin': '10px',    # Spacing between columns
-                'fontFamily': 'Arial, sans-serif',
-                'border': '1px solid #ccc',  # optional border
-                'padding': '8px'
+                'width': '280px',
+                'margin': '10px',
+                'fontFamily': '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                'background': 'rgba(255, 255, 255, 0.08)',
+                'backdropFilter': 'blur(15px)',
+                'WebkitBackdropFilter': 'blur(15px)',
+                'border': '1px solid rgba(255, 255, 255, 0.15)',
+                'borderRadius': '12px',
+                'padding': '16px',
+                'boxShadow': '0 4px 20px 0 rgba(31, 38, 135, 0.2)',
+                'color': 'rgba(255, 255, 255, 0.95)'
             }
         )
         cluster_columns.append(cluster_div)
@@ -586,37 +1047,45 @@ def run_cluster_importance(
         }
     )
 
-    # 10) Build final layout
+    # 10) Build final layout with card styling
     layout_div = html.Div([
-        html.H4("Clustering + Importance Analysis Results"),
-        html.P(f"Number of clusters = {k_clusters}"),
-        html.P(f"Samples for inference = {n_samples}"),
-        html.Hr(),
+        html.Div(className="card-big", children=[
+            html.H4("Clustering + Importance Analysis Results", style={'textAlign': 'center', 'color': 'white'}),
+            html.P(f"Number of clusters: {k_clusters} | Samples for inference: {n_samples}", 
+                   style={'textAlign': 'center', 'color': 'rgba(255, 255, 255, 0.9)', 'marginBottom': '20px'}),
+        ]),
 
         # Single BN figure
-        html.Img(
-            src=dag_img_src,
-            className="zoomable",
-            style={'maxWidth': '600px', 'display': 'block', 'margin': '0 auto'}
-        ),
+        html.Div(className="card", children=[
+            html.H5("Bayesian Network Structure", style={'textAlign': 'center', 'color': 'white', 'marginBottom': '20px'}),
+            html.Img(
+                src=dag_img_src,
+                className="zoomable",
+                style={'maxWidth': '600px', 'display': 'block', 'margin': '0 auto'}
+            ),
+        ]),
 
-        html.Hr(),
-        html.H4("Individual Subcluster DAGs (Carousel)"),
-        carousel,
+        # Carousel
+        html.Div(className="card", children=[
+            html.H5("Individual Cluster Networks", style={'textAlign': 'center', 'color': 'white', 'marginBottom': '20px'}),
+            carousel,
+        ]),
 
-        html.Hr(),
-        html.H5("Radar Chart of MAP Representatives + Importance"),
-        html.Img(
-            src=radar_img_src,
-            className="zoomable",
-            style={'maxWidth': '600px', 'display': 'block', 'margin': '0 auto'}
-        ),
+        # Radar chart
+        html.Div(className="card", children=[
+            html.H5("MAP Representatives + Importance", style={'textAlign': 'center', 'color': 'white', 'marginBottom': '20px'}),
+            html.Img(
+                src=radar_img_src,
+                className="zoomable",
+                style={'maxWidth': '600px', 'display': 'block', 'margin': '0 auto'}
+            ),
+        ]),
 
-        # Here is where we show the textual lines for each cluster
-        html.Div([
-            html.H5("MAP + Importance by Cluster", style={'marginTop': '20px'}),
-                map_importances_container
-            ])
+        # MAP + Importance details
+        html.Div(className="card", children=[
+            html.H5("Cluster Details", style={'textAlign': 'center', 'color': 'white', 'marginBottom': '20px'}),
+            map_importances_container
+        ])
     ])
     print("[DEBUG] run_cluster_importance returning layout_div.")
     return layout_div
@@ -696,33 +1165,85 @@ def run_cluster_only(n_clicks, k_clusters, df_json):
 
     arcs_list = list(best_network.arcs())
 
-    # 10) Return layout with single BN and a carousel for subclusters
+    # 10) Return layout with card styling
     return html.Div([
-        html.H4("Clustering Completed (Network Only)"),
-        html.P(f"Number of clusters = {k_clusters}"),
-
-        #List of arcs
-        #html.H5("Arcs:"),
-        #html.Ul(
-        #    [html.Li(str(arc), style={'fontSize': '14px', 'marginBottom': '5px'}) for arc in arcs_list],
-        #    style={
-        #        'listStyleType': 'none',
-        #        'paddingLeft': '20px',
-        #        'margin': '0'
-        #    }
-        #),
+        html.Div(className="card-big", children=[
+            html.H4("Clustering Results", style={'textAlign': 'center', 'color': 'white'}),
+            html.P(f"Number of clusters: {k_clusters}", 
+                   style={'textAlign': 'center', 'color': 'rgba(255, 255, 255, 0.9)', 'marginBottom': '20px'}),
+        ]),
 
         # Single BN figure
-        html.Img(src=single_bn_src, className="zoomable", style={'maxWidth': '600px'}),
+        html.Div(className="card", children=[
+            html.H5("Bayesian Network Structure", style={'textAlign': 'center', 'color': 'white', 'marginBottom': '20px'}),
+            html.Img(
+                src=single_bn_src,
+                className="zoomable",
+                style={'maxWidth': '600px', 'display': 'block', 'margin': '0 auto'}
+            ),
+        ]),
 
-        html.Hr(),
-        html.H4("Individual Subcluster DAGs (Carousel)"),
-        
-        # The carousel goes here:
-        carousel
+        # Carousel
+        html.Div(className="card", children=[
+            html.H5("Individual Cluster Networks", style={'textAlign': 'center', 'color': 'white', 'marginBottom': '20px'}),
+            carousel,
+        ]),
     ])
     
+# Popover callbacks
+@app.callback(
+    Output("help-popover-dataset", "is_open"),
+    Input("help-button-dataset", "n_clicks"),
+    State("help-popover-dataset", "is_open")
+)
+def toggle_dataset_popover(n, is_open):
+    if n:
+        return not is_open
+    return is_open
+
+@app.callback(
+    Output("help-popover-default-dataset", "is_open"),
+    Input("help-button-default-dataset", "n_clicks"),
+    State("help-popover-default-dataset", "is_open")
+)
+def toggle_default_dataset_popover(n, is_open):
+    if n:
+        return not is_open
+    return is_open
+
+@app.callback(
+    Output("help-popover-action", "is_open"),
+    Input("help-button-action", "n_clicks"),
+    State("help-popover-action", "is_open")
+)
+def toggle_action_popover(n, is_open):
+    if n:
+        return not is_open
+    return is_open
+
+@app.callback(
+    Output("help-popover-basic-params", "is_open"),
+    Input("help-button-basic-params", "n_clicks"),
+    State("help-popover-basic-params", "is_open")
+)
+def toggle_basic_params_popover(n, is_open):
+    if n:
+        return not is_open
+    return is_open
+
+@app.callback(
+    Output("help-popover-advanced-params", "is_open"),
+    Input("help-button-advanced-params", "n_clicks"),
+    State("help-popover-advanced-params", "is_open")
+)
+def toggle_advanced_params_popover(n, is_open):
+    if n:
+        return not is_open
+    return is_open
+
 if __name__ == '__main__':
     print("[DEBUG] Starting Dash server on port 8055...")
+    logger.info("=== STARTING CLUSTERING DASHBOARD APPLICATION ===")
+    logger.info("Running in standalone mode")
     #Default port is 8050
     app.run_server(debug=True, host='0.0.0.0', port=8055)
