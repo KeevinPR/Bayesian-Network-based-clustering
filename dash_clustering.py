@@ -456,7 +456,7 @@ def run_cluster_importance(
     log_debug("Calling discrete_structure.sem(...)")
     t0 = time.time()
     # Use max_iter=1, em_kmax=10 to speed up structure learning
-    best_network = discrete_structure.sem(bn_initial, df, categories, cluster_names, max_iter=1, em_kmax=10)
+    best_network = discrete_structure.sem(bn_initial, df, categories, cluster_names, max_iter=1, em_kmax=3)
     elapsed = time.time() - t0
     with open("/tmp/dash_debug.log", "a") as f:
         f.write(f"Structure learning: {elapsed:.2f}s\n")
@@ -658,7 +658,7 @@ def run_cluster_only(n_clicks, k_clusters, df_json):
 
     # 5) Train/learn the BN structure
     # Use max_iter=1, em_kmax=10 to speed up structure learning
-    best_network = discrete_structure.sem(bn_initial, df, categories, cluster_names, max_iter=1, em_kmax=10)
+    best_network = discrete_structure.sem(bn_initial, df, categories, cluster_names, max_iter=1, em_kmax=3)
 
     # 6) Single BN figure
     single_bn_src = plot_bn_dag(best_network, "Learned BN (Cluster Only)")
