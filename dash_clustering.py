@@ -217,9 +217,9 @@ app.layout = html.Div([
                                 src="https://cig.fi.upm.es/wp-content/uploads/github.png",
                                 style={"height": "24px", "marginRight": "8px"}
                             ),
-                            "Clustering GitHub"
+                            "Original GitHub"
                         ],
-                        href="https://github.com/CIG-UPM/BayesianNetworks",
+                        href="https://github.com/Victor-Alejandre/Bayesian-Network-based-clustering",
                         target="_blank",
                         className="btn btn-outline-info me-2"
                     ),
@@ -229,11 +229,23 @@ app.layout = html.Div([
                                 src="https://cig.fi.upm.es/wp-content/uploads/2023/11/cropped-logo_CIG.png",
                                 style={"height": "24px", "marginRight": "8px"}
                             ),
-                            "Documentation"
+                            "Paper PDF"
                         ],
-                        href="https://cig.fi.upm.es/",
+                        href="https://cig.fi.upm.es/wp-content/uploads/TFM_VICTOR_ALEJANDRE_JIMENEZ.pdf",
                         target="_blank",
                         className="btn btn-outline-primary me-2"
+                    ),
+                    html.A(
+                        children=[
+                            html.Img(
+                                src="https://cig.fi.upm.es/wp-content/uploads/github.png",
+                                style={"height": "24px", "marginRight": "8px"}
+                            ),
+                            "Dash Adapted GitHub"
+                        ],
+                        href="https://github.com/KeevinPR/Bayesian-Network-based-clustering",
+                        target="_blank",
+                        className="btn btn-outline-info me-2"
                     ),
                 ]
             ),
@@ -524,7 +536,7 @@ app.layout = html.Div([
             dbc.PopoverBody([
                 html.P([
                     "For details about the default dataset, check out: ",
-                    html.A("customersSmall.csv", href="https://github.com/CIG-UPM/BayesianNetworks", target="_blank"),
+                    html.A("customersSmall.csv", href="https://github.com/KeevinPR/Bayesian-Network-based-clustering/blob/master/datasets/customersSmall.csv", target="_blank"),
                 ]),
                 html.P("Feel free to upload your own dataset at any time.")
             ]),
