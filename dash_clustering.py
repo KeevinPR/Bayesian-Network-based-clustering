@@ -250,6 +250,32 @@ app.layout = html.Div([
                 ]
             ),
 
+            dbc.Alert(
+                [
+                    html.H5("Core Implementation Differences", className="alert-heading"),
+                    html.P(
+                        "This Dash version differs from the original repository in two key technical aspects:"
+                    ),
+                    html.Ul([
+                        html.Li([
+                            html.Strong("Vectorized Calculations: "),
+                            "We utilize efficient PyBnesian vectorized operations (e.g., bulk sampling and log-likelihood computation) instead of iterative Python loops."
+                        ]),
+                        html.Li([
+                            html.Strong("Sequential Processing: "),
+                            "We replaced Python-level parallelism (multiprocessing) with optimized sequential execution to reduce overhead and improve stability in this environment."
+                        ]),
+                    ]),
+                    html.Hr(),
+                    html.P(
+                        " These changes aim to maximize performance on limited-core environments avoiding overhead.",
+                        className="mb-0",
+                    ),
+                ],
+                color="warning",
+                style={"maxWidth": "800px", "margin": "0 auto 20px auto", "border": "1px solid #ffeeba", "backgroundColor": "#fff3cd", "color": "#856404"},
+            ),
+
             html.Div([
                 html.P(
                     "Discover hidden patterns in your data using Bayesian Network Clustering with importance analysis.",
